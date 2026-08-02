@@ -287,7 +287,7 @@ details summary{cursor:pointer;color:var(--acc);font-size:12.5px}
 <div class="toolbar no-print">
  <button class="primary" onclick="runCalc()">計算実行</button>
  <button onclick="printReport()">計算書を印刷(PDF)</button>
- <button onclick="loadSample()">サンプル読込(BCJ計算例:物販店舗)</button>
+ <button onclick="loadSample()">サンプル読込(計算例:物流倉庫の事務室)</button>
  <button onclick="exportJSON()">保存(JSON)</button>
  <button onclick="importJSON()">読込(JSON)</button>
  <input type="file" id="fileIn" accept=".json" style="display:none">
@@ -1121,30 +1121,51 @@ function renderAll(){
  document.getElementById("singleRoom").value=M.singleRoom?"1":"0";
  renderStairs();renderDoors();renderRooms();
 }
-/* BCJ計算例(物販店舗・平屋)サンプル: 出典「避難安全検証法(時間判定法)の解説及び計算例とその解説」5.6(正誤表反映後) */
+/* サンプル: 「避難安全検証法の解説及び計算例とその解説」5.8 物流倉庫の事務室
+   (令2国交告509号 区画避難安全検証法) pp.222-226
+   ※p.224の朱書き正誤訂正(ΣA_area(comp)=1090.40→790.40 m²、t_start(comp)=4.11→3.94分)を反映。
+     これに伴い区画避難完了時間は掲載値5.16分ではなく4.99分となる(判定はOK)。
+   ※区画歩行距離は計算例に最大値46.8mのみ記載のため全室に46.8mを設定(最大値のみが計算に使用される)。
+   ※階段室床面積は屋内階段28.40m²・屋外階段17.40m²(計算例のΣAst=45.80m²の内訳)。
+     本ツールは階段ごとにAst≧0.25ΣpAを判定するが、いずれも満たすためNeff=90で計算例と一致する。
+   ※階段幅・地上への出口幅は計算例に記載がなく、Neff=90の判定に影響しないため仮値(1.2m)。 */
 function loadSample(){
- M={bldgName:"サンプル 事務所ビル",floorName:"2階 事務室区画",isEscape:false,singleRoom:false,
-  stairs:[{id:"st1",name:"階段1",entryW:0.9,width:1.2,groundW:1.2,ast:10,aloadOverride:""}],
+ M={bldgName:"サンプル 物流倉庫ビル",floorName:"基準階 後方事務室エリア",isEscape:false,singleRoom:false,
+  stairs:[
+   {id:"st1",name:"屋内階段",entryW:0.85,width:1.2,groundW:1.2,ast:28.4,aloadOverride:""},
+   {id:"st2",name:"屋外階段",entryW:0.85,width:1.2,groundW:1.2,ast:17.4,aloadOverride:""}
+  ],
   doors:[
-   {id:"dA",name:"D1 片開き0.9m(遮煙2号)",width:0.9,rawW:0.95,topH:2.0,cls:"d2"},
-   {id:"dB",name:"D2 片開き0.9m(遮煙2号・区画外へ)",width:0.9,rawW:0.95,topH:2.0,cls:"d2"}
+   {id:"dA",name:"D1 片開き W0.9/H2.1(遮煙2号)",width:0.85,rawW:0.9,topH:2.1,cls:"d2"}
   ],
   rooms:[
-  {id:"rA",name:"事務室A",kind:"room",verify:true,useKey:"office",p:0.125,ql:560,walkV:78,interior:"funen",
-   area:200,Hroom:2.6,Hlow:"",Htop:"",lRoomExit:15,lStair:25,lStairAlt:"",
-   exits:[{id:"eA1",doorType:"dA",to:{type:"room",ref:"rC"}},{id:"eA2",doorType:"dA",to:{type:"room",ref:"rC"}}],
-   smoke:{type:"natural",zoned:false,tarekabeH:"",Asc:"",Aa:2,s:"",openings:[{w:4,hb:1.0,ht:2.5,cap:""}]}},
-  {id:"rB",name:"会議室B",kind:"room",verify:true,useKey:"meeting",p:0.125,ql:160,walkV:78,interior:"funen",
-   area:50,Hroom:2.6,Hlow:"",Htop:"",lRoomExit:8,lStair:18,lStairAlt:"",
-   exits:[{id:"eB1",doorType:"dA",to:{type:"room",ref:"rC"}}],
+  {id:"r1",name:"事務室1",kind:"room",verify:true,useKey:"office",p:0.125,ql:560,walkV:78,interior:"funen",
+   area:132.70,Hroom:3.0,Hlow:"",Htop:"",lRoomExit:14.7,lStair:46.8,lStairAlt:"",
+   exits:[{id:"e11",doorType:"dA",to:{type:"room",ref:"rC"}},{id:"e12",doorType:"dA",to:{type:"room",ref:"rC"}}],
    smoke:{type:"none",zoned:false,tarekabeH:"",Asc:"",Aa:"",s:"",openings:[]}},
-  {id:"rC",name:"廊下C",kind:"corridor",verify:false,fireExempt:true,useKey:"corridor",p:0,ql:32,walkV:78,interior:"funen",
-   area:30,Hroom:2.4,Hlow:"",Htop:"",lRoomExit:0,lStair:5,lStairAlt:"",
-   exits:[{id:"eC1",doorType:"dB",to:{type:"stair",ref:"st1"}}],
+  {id:"r2",name:"事務室2",kind:"room",verify:true,useKey:"office",p:0.125,ql:560,walkV:78,interior:"funen",
+   area:90.30,Hroom:3.0,Hlow:"",Htop:"",lRoomExit:13.0,lStair:46.8,lStairAlt:"",
+   exits:[{id:"e21",doorType:"dA",to:{type:"room",ref:"rC"}},{id:"e22",doorType:"dA",to:{type:"room",ref:"rC"}}],
+   smoke:{type:"none",zoned:false,tarekabeH:"",Asc:"",Aa:"",s:"",openings:[]}},
+  {id:"r3",name:"事務室3",kind:"room",verify:true,useKey:"office",p:0.125,ql:560,walkV:78,interior:"funen",
+   area:107.00,Hroom:3.0,Hlow:"",Htop:"",lRoomExit:13.8,lStair:46.8,lStairAlt:"",
+   exits:[{id:"e31",doorType:"dA",to:{type:"room",ref:"rC"}},{id:"e32",doorType:"dA",to:{type:"room",ref:"rC"}}],
+   smoke:{type:"none",zoned:false,tarekabeH:"",Asc:"",Aa:"",s:"",openings:[]}},
+  {id:"r4",name:"事務室4",kind:"room",verify:true,useKey:"office",p:0.125,ql:560,walkV:78,interior:"funen",
+   area:214.00,Hroom:3.0,Hlow:"",Htop:"",lRoomExit:14.7,lStair:46.8,lStairAlt:"",
+   exits:[{id:"e41",doorType:"dA",to:{type:"room",ref:"rC"}},{id:"e42",doorType:"dA",to:{type:"room",ref:"rC"}},{id:"e43",doorType:"dA",to:{type:"room",ref:"rC"}}],
+   smoke:{type:"none",zoned:false,tarekabeH:"",Asc:"",Aa:"",s:"",openings:[]}},
+  {id:"rC",name:"廊下",kind:"corridor",verify:false,fireExempt:true,useKey:"corridor",p:0,ql:32,walkV:78,interior:"funen",
+   area:182.20,Hroom:2.7,Hlow:"",Htop:"",lRoomExit:0,lStair:46.8,lStairAlt:"",
+   exits:[{id:"eC1",doorType:"dA",to:{type:"stair",ref:"st1"}},{id:"eC2",doorType:"dA",to:{type:"stair",ref:"st2"}}],
+   smoke:{type:"none",zoned:false,tarekabeH:"",Asc:"",Aa:"",s:"",openings:[]}},
+  {id:"rW",name:"WC",kind:"corridor",verify:false,fireExempt:true,useKey:"corridor",p:0,ql:32,walkV:78,interior:"funen",
+   area:64.20,Hroom:2.7,Hlow:"",Htop:"",lRoomExit:0,lStair:46.8,lStairAlt:"",
+   exits:[{id:"eW1",doorType:"dA",to:{type:"room",ref:"rC"}}],
    smoke:{type:"none",zoned:false,tarekabeH:"",Asc:"",Aa:"",s:"",openings:[]}}
  ]};
  seq=100; renderAll();
- alert("サンプル(事務室2+廊下の区画・避難階以外)を読み込みました。「計算実行」で検証します。\n廊下Cは平12建告1440号該当として火災室から除外しています。");
+ alert("サンプル(計算例5.8 物流倉庫の事務室・避難階以外)を読み込みました。「計算実行」で検証します。\n・廊下・WCは平12建告1440号該当として火災室から除外しています。\n・p.224の朱書き正誤訂正(ΣA_area(comp)=790.40m2、t_start(comp)=3.94分)を反映しているため、区画避難完了時間は掲載値5.16分ではなく4.99分となります。");
 }
 /* init v2.0(区画避難版) */
 renderAll();showTab("base");
