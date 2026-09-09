@@ -79,7 +79,7 @@ details summary{cursor:pointer;color:var(--acc);font-size:12.5px}
 <body>
 <header>
  <h1>区画避難安全検証法(時間判定法・ルートB1)計算ツール</h1>
- <div class="sub">建築基準法施行令第128条の6第3項第1号/令和2年国土交通省告示第509号 準拠(参考計算) — 本ツールは設計補助を目的とした参考計算であり、確認申請等への使用にあたっては設計者が告示原文と照合・検算のうえ責任をもって判断してください。</div>
+ <div class="sub">建築基準法施行令第128条の7第3項第1号/令和2年国土交通省告示第509号 準拠(参考計算) — 本ツールは設計補助を目的とした参考計算であり、確認申請等への使用にあたっては設計者が告示原文と照合・検算のうえ責任をもって判断してください。</div>
 </header>
 <main>
 <div class="banner no-print" aria-hidden="true">
@@ -312,7 +312,7 @@ details summary{cursor:pointer;color:var(--acc);font-size:12.5px}
   <div class="f"><label>区画部分の構成</label><select id="singleRoom"><option value="0">複数室(区画避難まで検証)</option><option value="1">1の居室のみ(第三号・第四号を省略)</option></select></div>
  </div>
  <div class="legalref">
-  適用上の前提(令128条の6・告示509号): ①区画部分は準耐火構造の壁・床及び遮煙性能を有する常閉/煙連動の防火設備(令112条19項2号)で区画すること(10分間防火設備は不可)。②区画部分以外の部分に存する者が当該区画部分を通らずに避難できる計画であること(告示509号第三号イかっこ書)。③竪穴部分に面する場合は出入口を除きはめごろし戸(19項2号構造)等で区画すること。④病院・診療所・児童福祉施設等の用途には適用できません。⑤本検証で適用除外できる規定は排煙設備の設置・構造及び内装制限のみ(令128条の6第1項の表)。⑥消防法令の規定は別途適用されます。
+  適用上の前提(令128条の7・告示509号): ①区画部分は準耐火構造の壁・床及び遮煙性能を有する常閉/煙連動の防火設備(令112条19項2号)で区画すること(10分間防火設備は不可)。②区画部分以外の部分に存する者が当該区画部分を通らずに避難できる計画であること(告示509号第三号イかっこ書)。③竪穴部分に面する場合は出入口を除きはめごろし戸(19項2号構造)等で区画すること。④病院・診療所・児童福祉施設等の用途には適用できません。⑤本検証で適用除外できる規定は排煙設備の設置・構造及び内装制限のみ(令128条の7第1項)。⑥消防法令の規定は別途適用されます。⑦本ツールの条番号は2026年9月時点の現行令によります(区画避難安全検証法は令和2年新設時は令128条の6でしたが、現行では令128条の7です)。
  </div>
 </div>
 
@@ -987,12 +987,12 @@ function syncHeader(){
 }
 function showResults(){
  const b=document.getElementById("resultsBody");
- let h="<h3>居室避難(令128条の6第3項1号イ・ロ/告示509号第一号・第二号)</h3>";
+ let h="<h3>居室避難(令128条の7第3項1号イ・ロ/告示509号第一号・第二号)</h3>";
  LAST.roomResults.forEach(rr=>{
   h+=`<div class="result-box ${rr.ok?"pass":"fail"}"><b>${rr.room.name}</b>: 居室避難完了時間 ${fmt(rr.tescR)}分 ${rr.ok?"≦":"＞"} 居室煙降下時間 ${fmt(rr.tsR)}分 → <span class="${rr.ok?"ok":"ng"}">${rr.ok?"OK":"NG"}</span>
   ${rr.warns.length?`<div class="warn">⚠ ${rr.warns.join(" / ")}</div>`:""}</div>`;
  });
- h+="<h3>区画避難(令128条の6第3項1号ニ・ホ/告示509号第三号・第四号) — 火災室ごと</h3>";
+ h+="<h3>区画避難(令128条の7第3項1号ニ・ホ/告示509号第三号・第四号) — 火災室ごと</h3>";
  if(LAST.floorResult.skipped){h+=`<div class="result-box pass">区画部分が1の居室のみのため第三号・第四号の検証は省略(居室避難までで判定)。以下は参考表示。</div>`;}
  LAST.floorResult.perFire.forEach(pf=>{
   h+=`<div class="result-box ${pf.ok?"pass":"fail"}"><b>火災室: ${pf.fire.name}</b>: 区画避難完了時間 ${fmt(pf.tescR)}分 ${pf.ok?"≦":"＞"} 区画煙降下時間 ${isFinite(pf.tsmoke)?fmt(pf.tsmoke):"—"}分 → <span class="${pf.ok?"ok":"ng"}">${pf.ok?"OK":"NG"}</span>
@@ -1027,7 +1027,7 @@ function buildReport(){
  let h=`<div class="rep">
  <h1>区画避難安全検証法(時間判定法)計算書</h1>
  <div>建物名称: ${esc(model.bldgName)||"—"} / 対象区画部分: ${esc(model.floorName)||"—"}(${model.isEscape?"避難階":"避難階以外"}に存する) / 作成日: ${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日</div>
- <div style="margin:4px 0">根拠: 建築基準法施行令第128条の6第3項第1号、令和2年国土交通省告示第509号(区画部分からの避難に要する時間に基づく区画避難安全検証法に関する算出方法等を定める件)</div>
+ <div style="margin:4px 0">根拠: 建築基準法施行令第128条の7第3項第1号、令和2年国土交通省告示第509号(区画部分からの避難に要する時間に基づく区画避難安全検証法に関する算出方法等を定める件)</div>
  <div style="font-size:10.5px;color:#555">※本計算書は参考計算です。数値・式の適用は告示原文との照合が必要です。避難時間は切上げ、煙降下時間は切捨てで比較(小数第2位)。火災室の限界煙層高さは経路先開口部の防火設備構造により判定((一財)日本建築センター「避難安全検証法(時間判定法)の解説及び計算例とその解説」の取扱いに準拠)。火災室に隣接しない経路上の室の煙等発生量は、経路上の直前の室との壁・開口部により評価(告示第四号の「いずれかの壁」の選択として安全側)。</div>`;
  /* 室一覧 */
  h+=`<h2>1. 計算条件(室一覧)</h2><table><tr><th>室名</th><th>区分</th><th>用途</th><th>床面積[m²]</th><th>天井高Hroom[m]</th><th>内装(αm)</th><th>p[人/m²]</th><th>ql[MJ/m²]</th><th>αf</th><th>排煙</th></tr>`;
@@ -1065,7 +1065,7 @@ function buildReport(){
  <tr><td>イ 区画避難開始時間 tstart=√(ΣAarea)/30 ${F.sleeping?"+5(共同住宅・ホテル等)":"+3(その他用途)"}</td><td><b>${fmt(F.tstart)} 分</b></td></tr></table>`;
  const exRooms=model.rooms.filter(r=>r.fireExempt);
  if(exRooms.length){
-  h+=`<div style="font-size:11px;margin:4px 0">火災室から除外した室(令128条の6第2項かっこ書・平12建設省告示第1440号(令和2年告示509号附則による改正後)「火災の発生のおそれの少ない室」該当として設計者判断): <b>${exRooms.map(r=>esc(r.name)).join("、")}</b><br>※同告示の該当条件(廊下・通路・便所・機械室・不燃性物品保管室等であり、かつ壁・天井の室内に面する仕上げが令128条の5第1項2号の仕上げ(準不燃材料等)であること)を満たすことを設計者が別途確認すること。</div>`;
+  h+=`<div style="font-size:11px;margin:4px 0">火災室から除外した室(令128条の7第2項かっこ書(「火災室」の定義)・平12建設省告示第1440号(令和2年告示509号附則による改正後)「火災の発生のおそれの少ない室」該当として設計者判断): <b>${exRooms.map(r=>esc(r.name)).join("、")}</b><br>※同告示の該当条件(廊下・通路・便所・機械室・不燃性物品保管室等であり、かつ壁・天井の室内に面する仕上げが令128条の5第1項2号の仕上げ(準不燃材料等)であること)を満たすことを設計者が別途確認すること。</div>`;
  }
  F.perFire.forEach((pf,pi)=>{
   h+=`<h3>3.${pi+1} 火災室: ${esc(pf.fire.name)}</h3>
@@ -1091,7 +1091,7 @@ function buildReport(){
  });
  const all=roomResults.every(r=>r.ok)&&(F.skipped||F.ok);
  h+=`<h2>4. 総合判定</h2><div style="font-size:14px" class="${all?"j-ok":"j-ng"}">${all?"当該区画部分は区画避難安全性能を有することが確かめられた(OK)":"不適合項目があります(NG)"}</div>
- <div style="margin-top:8px;font-size:10.5px;color:#555">検証により適用除外となり得る規定は令128条の6第1項の表によります(排煙設備の設置・構造及び内装制限のみ)。適用除外規定は本ツールの対象外につき別途確認してください。</div>
+ <div style="margin-top:8px;font-size:10.5px;color:#555">検証により適用除外となり得る規定は令128条の7第1項に掲げる規定によります(排煙設備の設置・構造及び内装制限のみ)。適用除外規定は本ツールの対象外につき別途確認してください。</div>
  </div>`;
  document.getElementById("report").innerHTML=h;
 }
