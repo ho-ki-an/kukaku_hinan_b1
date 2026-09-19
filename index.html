@@ -38,7 +38,25 @@ table.t input,table.t select{padding:3px 5px;border:1px solid var(--line);border
 .roomCard{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:10px 0;background:#fbfcfd}
 .roomCard.folded > *:not(.rhead){display:none}
 .roomCard.folded{cursor:grab}
-.roomCard.dropTarget{outline:3px dashed var(--acc);outline-offset:2px}
+.roomCard{position:relative}
+.roomCard.dropBefore::before,.roomCard.dropAfter::after{content:"";position:absolute;left:0;right:0;height:3px;background:var(--acc);border-radius:2px;pointer-events:none}
+.roomCard.dropBefore::before{top:-7px}
+.roomCard.dropAfter::after{bottom:-7px}
+#doorTbl td.dragH{cursor:grab;color:#9aa5b1;text-align:center;font-size:15px;user-select:none;width:18px;padding-left:2px;padding-right:2px}
+#doorTbl td.dragH:hover{color:var(--acc)}
+#doorTbl th.chkCol,#doorTbl td.chkCol{width:30px;padding-left:2px;padding-right:2px;text-align:center}
+#doorTbl td.chkCol input{width:auto;min-width:0;margin:0}
+#doorTbl th.nmCol,#doorTbl td.nmCol{min-width:230px}
+.roomCard .dragH{cursor:grab;color:#9aa5b1;font-size:16px;user-select:none;padding:0 4px}
+.roomCard .dragH:hover{color:var(--acc)}
+.roomCard.dragging{opacity:.4}
+#doorTbl tr.dropBefore td{box-shadow:inset 0 3px 0 var(--acc)}
+#doorTbl tr.dropAfter td{box-shadow:inset 0 -3px 0 var(--acc)}
+#doorTbl tr.dragging{opacity:.4}
+#doorTbl tr.chkDone td{background:#eef7ee}
+#doorTbl .sortBtn{margin-left:6px;padding:1px 6px;font-size:11px;line-height:1.4;cursor:pointer;border:1px solid var(--line);border-radius:4px;background:#fff;color:inherit}
+#doorTbl .sortBtn:hover{border-color:var(--acc);color:var(--acc)}
+@media print{#doorTbl td.dragH,#doorTbl th.dragH{display:none}}
 .foldBtn{width:28px;font-weight:700}
 .roomCard .rhead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .roomCard .rhead .nm{font-weight:700;font-size:14px}
@@ -331,6 +349,7 @@ tr.noEvacRow>td{background:#fbf1e3}
  <table class="t" id="doorTbl"></table>
  <button class="small" onclick="addDoor()">＋建具を追加</button>
  <div class="small-note">ここで定義した建具を「室の入力」タブの出口プルダウンから選択します。同じ建具(同一仕様)を複数の出口で使い回せます。2室にまたがる建具は両方の室の出口として同じ建具を選択してください(開口面積Aopは方向別合計の大きい方を採用するため二重計上されません)。寸法を変更した場合、全ての使用箇所に反映されます。</div>
+ <div class="small-note"><b>入力確認</b>: 図面との照合用のチェック欄です(オン/オフのみ。計算・計算書には一切影響しません。JSON保存時は状態も保存されます)。<b>並べ替え</b>: 名称欄の「A→Z」ボタンで名称順(数字は数値順: D2→D10)、左端の⠿をドラッグして任意の順に入れ替えできます。この順序が室の出口プルダウンと計算書の一覧の順になります。</div>
  <div class="small-note"><b>避難時不使用</b>: 防火シャッター・常時閉鎖の防火戸(機械室扉等)など、<u>開口部としては存在するが避難経路として通行できない建具</u>にチェックします。チェックした建具は居室出口通過時間Σ(Neff·Beff)・区画外出口通過時間Σ(Neff·Bst)の算定から除外され、最大幅出口(居室のBeff低減・火災室の除外出口)の判定対象からも外れます。一方、煙の算定(開口面積Aop・限界煙層高さHlim・煙の伝播経路)には引き続き算入されます。</div>
 </div>
 </div><!-- pane-doors -->
@@ -338,7 +357,7 @@ tr.noEvacRow>td{background:#fbf1e3}
 <div id="pane-rooms" style="display:none">
 <div class="card">
  <h2>3. 室の入力(当該区画部分内の全ての室・廊下等)</h2>
- <div style="margin:2px 0 6px"><button class="small" onclick="foldAll(true)">すべて折りたたむ</button> <button class="small" onclick="foldAll(false)">すべて展開</button> <span class="small-note">折りたたんだカードはドラッグ&ドロップで並べ替えできます</span></div>
+ <div style="margin:2px 0 6px"><button class="small" onclick="foldAll(true)">すべて折りたたむ</button> <button class="small" onclick="foldAll(false)">すべて展開</button> <span class="small-note">折りたたんだカードは、見出し左の⠿(またはカード全体)をドラッグして順番を入れ替えできます</span></div>
  <div id="roomsArea"></div>
  <button class="small" onclick="addRoom()">＋室を追加</button>
 </div>
@@ -781,11 +800,15 @@ function addDoor(){ // 2つ目以降は直前のコピー
 function delDoor(i){const id=M.doors[i].id;M.doors.splice(i,1);M.rooms.forEach(r=>(r.exits||[]).forEach(e=>{if(e.doorType===id)e.doorType="";}));renderDoors();renderRooms();}
 function renderDoors(){
  const t=document.getElementById("doorTbl"); if(!t)return;
- let h="<tr><th>名称</th><th>有効幅B[m]</th><th>開口見付幅[m]<br>(Aop用・空欄=B)</th><th>上端高さ[m]</th><th style=\"white-space:nowrap\">避難時<br>不使用</th><th>防火設備(令112条19項)</th><th>使用箇所</th><th></th></tr>";
+ const nChk=(M.doors||[]).filter(d=>d.chk).length;
+ let h=`<tr><th class="dragH" title="行をドラッグして並べ替え"></th><th class="chkCol" style="font-size:10.5px;line-height:1.2" title="入力確認：図面との照合用(計算・計算書には影響しません)">確<br>認<br><span style="font-weight:400;font-size:9.5px">${nChk}/${(M.doors||[]).length}</span></th><th class="nmCol" style="white-space:nowrap">名称<button type="button" class="sortBtn" title="名称で並べ替え(A→Z/Z→A 切替・数字は数値順)" onclick="sortDoors()">${DOOR_SORT_DIR>0?"A→Z ▲":"Z→A ▼"}</button></th><th>有効幅B[m]</th><th>開口見付幅[m]<br>(Aop用・空欄=B)</th><th>上端高さ[m]</th><th style="white-space:nowrap">避難時<br>不使用</th><th>防火設備(令112条19項)</th><th>使用箇所</th><th></th></tr>`;
  (M.doors||[]).forEach((d,i)=>{
   const used=[];M.rooms.forEach(r=>(r.exits||[]).forEach(e=>{if(e.doorType===d.id)used.push(r.name);}));
-  h+=`<tr${d.noEvac?' class="noEvacRow"':""}>
-   <td><input value="${d.name}" oninput="M.doors[${i}].name=this.value"></td>
+  const cls=[d.noEvac?"noEvacRow":"",d.chk?"chkDone":""].filter(Boolean).join(" ");
+  h+=`<tr${cls?` class="${cls}"`:""} ondragstart="dragDoor(event,${i})" ondragover="dragOverDoor(event)" ondragleave="dragLeaveDoor(event)" ondrop="dropDoor(event,${i})" ondragend="dragEndDoor(event)">
+   <td class="dragH" title="ドラッグして並べ替え" onmousedown="this.parentNode.draggable=true" onmouseup="this.parentNode.draggable=false">⠿</td>
+   <td class="chkCol"><input type="checkbox" ${d.chk?"checked":""} title="図面と照合済みの印(計算・計算書には影響しません)" onchange="M.doors[${i}].chk=this.checked;renderDoors()"></td>
+   <td class="nmCol"><input value="${d.name}" oninput="M.doors[${i}].name=this.value"></td>
    <td><input type="number" step="0.05" value="${d.width}" oninput="M.doors[${i}].width=num(this.value)"></td>
    <td><input type="number" step="0.05" value="${d.rawW}" placeholder="=B" oninput="M.doors[${i}].rawW=this.value"></td>
    <td><input type="number" step="0.05" value="${d.topH}" oninput="M.doors[${i}].topH=num(this.value)"></td>
@@ -795,6 +818,35 @@ function renderDoors(){
    <td><button class="small danger" onclick="delDoor(${i})">削除</button></td></tr>`;
  });
  t.innerHTML=h;
+}
+/* 名称の並べ替え(自然順: D2 < D10)。表示順=室の出口プルダウン・計算書の順 */
+let DOOR_SORT_DIR=1;
+function sortDoors(){
+ const col=new Intl.Collator("ja",{numeric:true,sensitivity:"base"});
+ const dir=DOOR_SORT_DIR;
+ (M.doors||[]).sort((a,b)=>dir*col.compare(String(a.name||""),String(b.name||"")));
+ DOOR_SORT_DIR=-dir; renderDoors(); renderRooms();
+}
+/* 建具行のドラッグ並べ替え(左端の⠿をつかんで移動) */
+/* ドラッグ時の差し込み位置: 対象の上半分=前に挿入(上辺に線)、下半分=後ろに挿入(下辺に線) */
+function dropPos(ev){const r=ev.currentTarget.getBoundingClientRect();return (ev.clientY-r.top)<r.height/2?"before":"after";}
+function markDrop(ev){const pos=dropPos(ev),el=ev.currentTarget;el.classList.toggle("dropBefore",pos==="before");el.classList.toggle("dropAfter",pos==="after");return pos;}
+function clearDrop(el){el.classList.remove("dropBefore","dropAfter");}
+function moveItem(arr,from,i,pos){ // from番目を、i番目の前(before)/後(after)へ移動
+ let to=i+(pos==="after"?1:0); if(from<to) to--;
+ if(to===from) return false;
+ const [mv]=arr.splice(from,1); arr.splice(to,0,mv); return true;
+}
+let DRAG_D=null;
+function dragDoor(ev,i){if(ev.target!==ev.currentTarget)return;DRAG_D=i;ev.dataTransfer.effectAllowed="move";try{ev.dataTransfer.setData("text/plain","door"+i);}catch(e){}ev.currentTarget.classList.add("dragging");}
+function dragOverDoor(ev){if(DRAG_D==null)return;ev.preventDefault();ev.dataTransfer.dropEffect="move";markDrop(ev);}
+function dragLeaveDoor(ev){clearDrop(ev.currentTarget);}
+function dragEndDoor(ev){DRAG_D=null;ev.currentTarget.draggable=false;document.querySelectorAll("#doorTbl .dropBefore,#doorTbl .dropAfter,#doorTbl .dragging").forEach(el=>el.classList.remove("dropBefore","dropAfter","dragging"));}
+function dropDoor(ev,i){
+ ev.preventDefault();const pos=dropPos(ev);clearDrop(ev.currentTarget);
+ if(DRAG_D==null){renderDoors();return;}
+ const moved=moveItem(M.doors,DRAG_D,i,pos);
+ DRAG_D=null;renderDoors();if(moved)renderRooms();
 }
 /* ---------- タブ ---------- */
 const PANES={base:"pane-base",doors:"pane-doors",rooms:"pane-rooms",results:"resultsArea",report:"report"};
@@ -896,9 +948,9 @@ function renderRooms(){
     <td><input type="number" step="0.05" value="${o.ht}" oninput="M.rooms[${i}].smoke.openings[${oi}].ht=num(this.value)"></td>
     <td><input type="number" step="1" value="${o.cap}" placeholder="機械排煙のみ" oninput="M.rooms[${i}].smoke.openings[${oi}].cap=this.value"></td>
     <td><button class="small danger" onclick="delOpening(${i},${oi})">×</button></td></tr>`).join("");
-  h+=`<div class="roomCard ${r._fold?"folded":""}" ${r._fold?`draggable="true" ondragstart="dragRoom(event,${i})" ondragover="dragOverRoom(event)" ondrop="dropRoom(event,${i})" ondragleave="dragLeaveRoom(event)" ondragend="dragEndRoom(event)"`:""}>
+  h+=`<div class="roomCard ${r._fold?"folded":""}" ${r._fold?`draggable="true"`:""} ondragstart="dragRoom(event,${i})" ondragover="dragOverRoom(event)" ondrop="dropRoom(event,${i})" ondragleave="dragLeaveRoom(event)" ondragend="dragEndRoom(event)" onmousedown="ROOM_MD=event.target.tagName">
    <div class="rhead">
-    <span class="nm"><button class="small foldBtn" title="${r._fold?"展開":"折りたたむ"}" onclick="M.rooms[${i}]._fold=!M.rooms[${i}]._fold;renderRooms()">${r._fold?"▶":"▼"}</button> <input value="${r.name}" style="font-weight:700;border:none;border-bottom:1px solid var(--line);background:transparent;width:180px" oninput="M.rooms[${i}].name=this.value;renderStairsSoft()"><span class="badge">${KIND[r.kind]}</span>${r._fold?`<span class="small-note"> ${USES[r.useKey]?.label||""} / A=${r.area}m² / 天井高${r.Hroom}m / 出口${(r.exits||[]).length} / 排煙:${{none:"なし",natural:"自然",mech:"機械",special:"特殊"}[(r.smoke||{}).type||"none"]}</span>`:""}</span>
+    <span class="nm">${r._fold?`<span class="dragH" title="ドラッグして室の順番を入れ替え">⠿</span>`:""}<button class="small foldBtn" title="${r._fold?"展開":"折りたたむ"}" onclick="M.rooms[${i}]._fold=!M.rooms[${i}]._fold;renderRooms()">${r._fold?"▶":"▼"}</button> <input value="${r.name}" style="font-weight:700;border:none;border-bottom:1px solid var(--line);background:transparent;width:180px" oninput="M.rooms[${i}].name=this.value;renderStairsSoft()"><span class="badge">${KIND[r.kind]}</span>${r._fold?`<span class="small-note"> ${USES[r.useKey]?.label||""} / A=${r.area}m² / 天井高${r.Hroom}m / 出口${(r.exits||[]).length} / 排煙:${{none:"なし",natural:"自然",mech:"機械",special:"特殊"}[(r.smoke||{}).type||"none"]}</span>`:""}</span>
     <button class="small danger" onclick="delRoom(${i})">室を削除</button>
    </div>
    <div class="grid" style="margin-top:8px">
@@ -958,16 +1010,16 @@ function addRoomCopy(i){ // 当該カードの直下にコピーを挿入
 }
 /* ---------- 室カードのドラッグ並べ替え(折りたたみ時) ---------- */
 let DRAG_I=null;
-function dragRoom(ev,i){DRAG_I=i;ev.dataTransfer.effectAllowed="move";}
-function dragOverRoom(ev){if(DRAG_I==null)return;ev.preventDefault();ev.currentTarget.classList.add("dropTarget");}
-function dragLeaveRoom(ev){ev.currentTarget.classList.remove("dropTarget");}
-function dragEndRoom(ev){DRAG_I=null;document.querySelectorAll(".dropTarget").forEach(el=>el.classList.remove("dropTarget"));}
+let ROOM_MD="";
+function dragRoom(ev,i){if(ev.target!==ev.currentTarget)return;if(/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ROOM_MD)){ev.preventDefault();return;} /* 名称欄の文字選択ドラッグでは移動しない */DRAG_I=i;ev.dataTransfer.effectAllowed="move";try{ev.dataTransfer.setData("text/plain","room"+i);}catch(e){}ev.currentTarget.classList.add("dragging");}
+function dragOverRoom(ev){if(DRAG_I==null)return;ev.preventDefault();ev.dataTransfer.dropEffect="move";markDrop(ev);}
+function dragLeaveRoom(ev){clearDrop(ev.currentTarget);}
+function dragEndRoom(ev){DRAG_I=null;document.querySelectorAll(".roomCard.dropBefore,.roomCard.dropAfter,.roomCard.dragging").forEach(el=>el.classList.remove("dropBefore","dropAfter","dragging"));}
 function dropRoom(ev,i){
- ev.preventDefault();ev.currentTarget.classList.remove("dropTarget");
- if(DRAG_I==null||DRAG_I===i)return;
- const [mv]=M.rooms.splice(DRAG_I,1);
- M.rooms.splice(i,0,mv);
- DRAG_I=null;renderRooms();
+ ev.preventDefault();const pos=dropPos(ev);clearDrop(ev.currentTarget);
+ if(DRAG_I==null)return;
+ const moved=moveItem(M.rooms,DRAG_I,i,pos);
+ DRAG_I=null;if(moved)renderRooms();
 }
 function applyUse(i,key){
  const u=USES[key]; const r=M.rooms[i];
@@ -1206,6 +1258,11 @@ function loadSample(){
  seq=100; renderAll();
  alert("サンプル(計算例5.8 物流倉庫の事務室・避難階以外)を読み込みました。「計算実行」で検証します。\n・廊下・WCは平12建告1440号該当として火災室から除外しています。\n・p.224の朱書き正誤訂正(ΣA_area(comp)=790.40m2、t_start(comp)=3.94分)を反映しているため、区画避難完了時間は掲載値5.16分ではなく4.99分となります。");
 }
+/* v2.1 変更点:
+   ・建具リストに「入力確認」チェック欄を追加(図面照合用。計算・計算書には影響なし)
+   ・建具リストの名称欄に並べ替えボタン(自然順・昇降切替)、行のドラッグ並べ替えを追加
+   ・室の入力: 折りたたんだ室カードに⠿を表示。ドラッグ時の表示を建具と同じ差し込み線に変更
+   ・ドラッグの差し込み位置: 対象の上半分で前へ、下半分で後ろへ挿入 */
 /* init v2.0(区画避難版) */
 renderAll();showTab("base");
 </script>
