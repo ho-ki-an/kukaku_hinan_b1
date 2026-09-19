@@ -86,6 +86,11 @@ details summary{cursor:pointer;color:var(--acc);font-size:12.5px}
 .rep .j-ng{font-weight:700;color:#c0392b}
 .rep .pagebreak{page-break-before:always}
 tr.noEvacRow>td{background:#fbf1e3}
+.annexBox{margin-top:10px;border:1px solid var(--line);border-radius:6px;background:#fafbfc}
+.annexHead{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:6px 10px}
+.annexHead .ttl{font-weight:700;font-size:13px}
+.annexBody{padding:0 10px 10px}
+.annexBody .small-note{margin-top:4px}
 @media print{
  body{background:#fff;font-size:11px}
  header,.toolbar,#inputArea,#resultsArea,.no-print{display:none !important}
@@ -547,7 +552,7 @@ function neffRoomExit(model,room,e){
  const an=AN[F.kind]||0.3;
  const cap=F.area/an; // Σ(Aco/an)
  const capIds=captiveRoomsVia(model,F.id);
- const load=capIds.reduce((s,id)=>{const r=roomById(model,id);return s+(+r.p||0)*r.area;},0); // ΣpAload
+ const load=capIds.reduce((s,id)=>s+roomLoad(model,roomById(model,id)),0); // ΣpAload(手入力の付属居室を含む)
  if(hasEgressToGround(F)) return {Neff:90,reason:"経路部分("+F.name+")が地上への出口を有する → 90",F};
  if(cap>=load) return {Neff:90,reason:"Σ(Aco/an)="+fmt(cap,1)+" ≧ ΣpAload="+fmt(load,1)+" → 90",F,cap,load};
  const stairW=(F.exits||[]).filter(x=>!x.noEvac&&(x.to.type==="stair"||x.to.type==="ground")).map(x=>x.width);
@@ -559,10 +564,32 @@ function neffRoomExit(model,room,e){
  return {Neff,reason:"滞留あり: max(80·Bneck·Σ(Aco/an)/(B·ΣpAload), 80·Bneck/Bload)",F,cap,load,Bneck,Bload};
 }
 function hasEgressToGround(r){ return (r.exits||[]).some(e=>!e.noEvac&&e.to.type==="ground"); }
+/* --- 付属する居室(当該居室を通らなければ避難できない部分/告示509号第一号「当該居室等」) ---
+   mode="ref"   : 既に室カードとして入力済みの室を参照(区画部分の合計には元々含まれるので再加算しない)
+   mode="manual": 室カードを作らない小部屋を直接入力(区画部分の合計にも加算する)           */
+function annexParts(model,room){
+ const a=room.annex;
+ if(!a||!a.has) return [];
+ return (a.items||[]).map(it=>{
+  if(it.mode==="ref"){
+   const r=roomById(model,it.ref);
+   if(!r||r.id===room.id) return null;
+   return {name:r.name,area:+r.area||0,p:+r.p||0,fromRoom:true,ref:r.id};
+  }
+  return {name:it.name||"(名称未設定)",area:+it.area||0,p:+it.p||0,fromRoom:false};
+ }).filter(Boolean);
+}
+function manualParts(model,room){ return annexParts(model,room).filter(x=>!x.fromRoom); }
+/* 室の在館者数 pAarea(手入力の付属居室を含む。参照式は当該室自体が別途計上されるため含めない) */
+function roomLoad(model,r){
+ if(!r) return 0;
+ return (+r.p||0)*r.area + manualParts(model,r).reduce((s,x)=>s+x.p*x.area,0);
+}
 /* --- 居室避難(告示第一号・第二号) --- */
 function calcRoomEvac(model,room){
  const warns=[];
- const sumA=room.area;
+ const parts=annexParts(model,room);
+ const sumA=room.area+parts.reduce((s,x)=>s+x.area,0); // ΣAarea = 当該居室等の各部分の床面積(告示509号第一号イ)
  const tstart=Math.sqrt(sumA)/30;
  const v=+room.walkV||60;
  const ttravel=(+room.lRoomExit||0)/v;
@@ -588,7 +615,7 @@ function calcRoomEvac(model,room){
    denom+=nf.Neff*Beff;
    return {e,isW,Beff,note,...nf};
  });
- const P=(+room.p||0)*room.area;
+ const P=(+room.p||0)*room.area+parts.reduce((s,x)=>s+x.p*x.area,0); // ΣpAarea(当該居室等)
  const tqueue=denom>0? P/denom : (P>0?Infinity:0);
  if(denom<=0&&P>0)warns.push("有効な出口がありません(ΣNeff·Beff=0)");
  const tesc=tstart+ttravel+tqueue;
@@ -602,7 +629,7 @@ function calcRoomEvac(model,room){
  const tescR=ceil2(tstart)+ceil2(ttravel)+ceil2(tqueue);
  const tsR=floor2(ts);
  const ok = tescR<=tsR;
- return {room,tstart,ttravel,tqueue,tesc,tescR,tsR,af,am,treach,thr,exDet,P,denom,Vs,veR,ts,ok,warns};
+ return {room,parts,sumA,tstart,ttravel,tqueue,tesc,tescR,tsR,af,am,treach,thr,exDet,P,denom,Vs,veR,ts,ok,warns};
 }
 /* --- 限界煙層高さ Hlim(告示第四号) ---
    nextRoomId: 経路上の次室(火災室・中間室は次室への開口部の防火設備で判定/BCJ計算例準拠)
@@ -637,10 +664,15 @@ function connBetween(model,aId,bId){
 /* --- 階避難(告示第三号・第四号) --- */
 function calcFloor(model){
  const rooms=model.rooms;
- const sumA=rooms.reduce((s,r)=>s+r.area,0);
+ // 室カードを作らない付属居室(手入力)は区画部分の床面積・在館者にも算入する(告示509号第三号: 当該区画部分の各部分)
+ const annexManual=[];
+ rooms.forEach(r=>manualParts(model,r).forEach(x=>annexManual.push({...x,owner:r})));
+ const annexA=annexManual.reduce((s,x)=>s+x.area,0);
+ const annexPA=annexManual.reduce((s,x)=>s+x.p*x.area,0);
+ const sumA=rooms.reduce((s,r)=>s+r.area,0)+annexA;
  const sleeping=rooms.some(r=>USES[r.useKey]?.sleep);
  const tstart=Math.sqrt(sumA)/30+(sleeping?5:3);
- const sumPA=rooms.reduce((s,r)=>s+(+r.p||0)*r.area,0);
+ const sumPA=rooms.reduce((s,r)=>s+(+r.p||0)*r.area,0)+annexPA;
  // 直通階段への出口一覧
  const stExits=[];
  rooms.forEach(r=>(r.exits||[]).forEach(e=>{ if(qualifiesStairExit(model,e)) stExits.push({room:r,e}); }));
@@ -681,7 +713,7 @@ function calcFloor(model){
    const ok = pathDet.length? (tescR<=tsmoke) : (isFinite(tescR));
    return {fire,excluded,avail,stDet,tstart,ttravel,tRoomGov,tqueue,tesc,tescR,sumPA,denom,pathDet,tsmoke,govPath,ok,warns,sleeping,sumA};
  });
- return {perFire,sumA,sumPA,sleeping,tstart, ok:perFire.every(p=>p.ok)};
+ return {perFire,sumA,sumPA,sleeping,tstart,annexManual,annexA,annexPA, ok:perFire.every(p=>p.ok)};
 }
 function neffStair(model,x,avail){
  /* 告示509号第三号ハ: ΣpAは当該区画部分の各部分(区画全体)。
@@ -696,7 +728,7 @@ function neffStair(model,x,avail){
   return {Neff,reason:"避難階に存する区画の出口: Neff=90×min(1,Bneck/Bst)(Bneck="+fmt(Bneck)+"m・避難階のその他の場合の式は原文照合のこと・安全側の取扱い)",Bneck};
  }
  const Ast=+st.ast||0;
- let load=model.rooms.reduce((s,r)=>s+(+r.p||0)*r.area,0); // ΣpA(区画部分全体)
+ let load=model.rooms.reduce((s,r)=>s+roomLoad(model,r),0); // ΣpA(区画部分全体・手入力の付属居室を含む)
  if(st.aloadOverride!=null&&st.aloadOverride!=="") load=+st.aloadOverride;
  if(Ast>=0.25*load) return {Neff:90,reason:"ΣAst="+fmt(Ast,1)+" ≧ 0.25ΣpA="+fmt(0.25*load,1)+" → 90",Ast,load};
  const Bneck=Math.min(e.width, +st.entryW||e.width, +st.width||e.width, +st.groundW||e.width);
@@ -781,6 +813,11 @@ function resolveModel(src){ // 計算直前に建具仕様を出口へ展開(エ
 function normalizeModel(m){ // 旧形式JSON: インライン建具仕様→建具リストへ自動変換
  m.doors=m.doors||[];
  m.doors.forEach(d=>{ if(d.noEvac===undefined) d.noEvac=false; });
+ (m.rooms||[]).forEach(r=>{
+  if(!r.annex||typeof r.annex!=="object") r.annex={has:false,items:[]};
+  r.annex.items=r.annex.items||[];
+  r.annex.items.forEach(it=>{ if(!it.id) it.id=nid("an"); });
+ });
  (m.rooms||[]).forEach(r=>(r.exits||[]).forEach(e=>{
   if(!e.doorType && e.width!=null){
    let d=m.doors.find(x=>+x.width===+e.width&&String(x.rawW||"")===String(e.rawW||"")&&+x.topH===+(e.topH||2.0)&&(x.cls||"none")===(e.door||"none")&&!x.noEvac===!e.noEvac);
@@ -872,16 +909,21 @@ function addRoom(){ // 2つ目以降は直前の室のコピー(出口・排煙�
   r=JSON.parse(JSON.stringify(last));
   r.id=nid("r"); r.name=last.name+"のコピー"; r._fold=false;
   (r.exits||[]).forEach(e=>{e.id=nid("e");});
+  ((r.annex||{}).items||[]).forEach(it=>{it.id=nid("an");});
  }else{
   r={id:nid("r"),name:"室1",kind:"room",verify:true,useKey:"office",
    p:USES.office.p,ql:USES.office.ql,walkV:WALKCAT.office.other,interior:"funen",
    area:100,Hroom:2.7,Hlow:"",Htop:"",lRoomExit:10,lStair:20,lStairAlt:"",
+   annex:{has:false,items:[]},
    exits:[],smoke:{type:"none",zoned:false,tarekabeH:"",Asc:"",Aa:"",s:"",openings:[]}};
  }
  M.rooms.push(r); renderRooms();
 }
 function delRoom(i){ const id=M.rooms[i].id; M.rooms.splice(i,1);
- M.rooms.forEach(r=>{r.exits=(r.exits||[]).filter(e=>!(e.to.type==="room"&&e.to.ref===id));});
+ M.rooms.forEach(r=>{
+  r.exits=(r.exits||[]).filter(e=>!(e.to.type==="room"&&e.to.ref===id));
+  if(r.annex&&r.annex.items) r.annex.items=r.annex.items.filter(it=>!(it.mode==="ref"&&it.ref===id));
+ });
  renderRooms();
 }
 function addExit(ri){ // 2つ目以降は直前のコピー
@@ -891,6 +933,21 @@ function addExit(ri){ // 2つ目以降は直前のコピー
  e.id=nid("e"); ex.push(e); renderRooms();
 }
 function delExit(ri,ei){ M.rooms[ri].exits.splice(ei,1); renderRooms(); }
+/* ---------- 付属する居室(奥の居室) ---------- */
+function ensureAnnex(r){ if(!r.annex||typeof r.annex!=="object") r.annex={has:false,items:[]}; r.annex.items=r.annex.items||[]; return r.annex; }
+function setAnnexHas(ri,v){
+ const a=ensureAnnex(M.rooms[ri]); a.has=v;
+ if(v&&!a.items.length) a.items.push({id:nid("an"),mode:"manual",ref:"",name:"",area:"",p:0});
+ renderRooms();
+}
+function addAnnex(ri){
+ const a=ensureAnnex(M.rooms[ri]);
+ const last=a.items[a.items.length-1];
+ const it=last?JSON.parse(JSON.stringify(last)):{mode:"manual",ref:"",name:"",area:"",p:0};
+ it.id=nid("an"); a.items.push(it); renderRooms();
+}
+function delAnnex(ri,ai){ M.rooms[ri].annex.items.splice(ai,1); renderRooms(); }
+function setAnnexMode(ri,ai,v){ M.rooms[ri].annex.items[ai].mode=v; renderRooms(); }
 function addOpening(ri){ // 2つ目以降は直前のコピー
  const ops=M.rooms[ri].smoke.openings;
  const last=ops[ops.length-1];
@@ -925,6 +982,50 @@ function setExitTo(ri,ei,val){
  const e=M.rooms[ri].exits[ei];
  if(val==="ground")e.to={type:"ground",ref:""};
  else{const[t,ref]=val.split(":");e.to={type:t,ref};}
+}
+/* 付属する居室(奥の居室)の入力パネル — 折りたたみ式 */
+function annexBox(r,i){
+ const a=r.annex||{has:false,items:[]};
+ const items=a.items||[];
+ const parts=annexParts(M,r);
+ const sumA=r.area+parts.reduce((s,x)=>s+x.area,0);
+ const sumP=(+r.p||0)*r.area+parts.reduce((s,x)=>s+x.p*x.area,0);
+ let rows=items.map((it,ai)=>{
+  const isRef=it.mode==="ref";
+  const src=isRef? M.rooms.find(x=>x.id===it.ref) : null;
+  const refOpts=M.rooms.filter((x,j)=>j!==i).map(x=>`<option value="${x.id}" ${it.ref===x.id?"selected":""}>${esc(x.name)}</option>`).join("");
+  return `<tr>
+   <td><select onchange="setAnnexMode(${i},${ai},this.value)">
+     <option value="manual" ${!isRef?"selected":""}>手入力(室カードを作らない)</option>
+     <option value="ref" ${isRef?"selected":""}>入力済みの室を参照</option></select></td>
+   <td>${isRef
+     ? `<select onchange="M.rooms[${i}].annex.items[${ai}].ref=this.value;renderRooms()"><option value="">(室を選択)</option>${refOpts}</select>`
+     : `<input value="${esc(it.name)}" placeholder="例: 更衣室" oninput="M.rooms[${i}].annex.items[${ai}].name=this.value">`}</td>
+   <td>${isRef
+     ? `<span class="small-note">${src?fmt(src.area):"—"}</span>`
+     : `<input type="number" step="0.01" style="width:90px" value="${it.area}" oninput="M.rooms[${i}].annex.items[${ai}].area=num(this.value)">`}</td>
+   <td>${isRef
+     ? `<span class="small-note">${src?src.p:"—"}</span>`
+     : `<input type="number" step="0.001" style="width:80px" value="${it.p}" oninput="M.rooms[${i}].annex.items[${ai}].p=num(this.value)">`}</td>
+   <td class="small-note">${isRef?"参照先が室カードとして計上済<br>(区画部分の合計へは再加算しません)":"区画部分の床面積・在館者にも加算"}</td>
+   <td><button class="small danger" onclick="delAnnex(${i},${ai})">×</button></td></tr>`;
+ }).join("");
+ return `<div class="annexBox">
+  <div class="annexHead">
+   <span class="ttl">${a.has?"▼":"▶"} 付属する居室(当該居室を通らなければ避難できない部分)</span>
+   <select onchange="setAnnexHas(${i},this.value==='1')">
+    <option value="0" ${!a.has?"selected":""}>無</option>
+    <option value="1" ${a.has?"selected":""}>有</option></select>
+   ${a.has?`<span class="small-note">${items.length}件 → ΣAarea=${fmt(sumA)}m² / ΣpAarea=${fmt(sumP,1)}人</span>`
+         :`<span class="small-note">ΣAarea=${fmt(r.area)}m²(当該居室のみ)</span>`}
+  </div>
+  ${a.has?`<div class="annexBody">
+   <table class="t"><tr><th>入力方法</th><th>室名</th><th>床面積[m²]</th><th>在館者密度p[人/m²]</th><th>区画避難への算入</th><th></th></tr>${rows}</table>
+   <button class="small" onclick="addAnnex(${i})">＋付属する居室を追加</button>
+   <div class="small-note">告示509号第一号イのAareaは「当該居室<b>及び当該居室を通らなければ避難することができない建築物の部分</b>(当該居室等)の各部分の床面積」です。ここに入力した部分は当該居室の居室避難開始時間tstart=√(ΣAarea)/30 と居室出口通過時間tqueue=ΣpAarea/Σ(Neff·Beff) に算入されます。</div>
+   <div class="small-note warn">⚠ 上の「居室出口までの歩行距離 max」「直通階段出口までの歩行距離 max」(区画外への出口までの距離)は、<u>付属する居室の最遠部からの距離</u>で入力してください(告示第一号ロは当該居室等の各部分からの歩行時間の最大値)。なお居室煙降下時間(第二号)のA・Hroomは当該居室そのものの値を用います。</div>
+  </div>`:""}
+ </div>`;
 }
 function renderRooms(){
  const area=document.getElementById("roomsArea");
@@ -970,6 +1071,7 @@ function renderRooms(){
     <div class="f"><label>直通階段出口までの歩行距離 max [m]</label><input type="number" step="0.1" value="${r.lStair}" oninput="M.rooms[${i}].lStair=num(this.value)"></div>
     <div class="f"><label>同左(火災室で最大幅出口除外時)[m]<br><span class="small-note">空欄=同じ値</span></label><input type="number" step="0.1" value="${r.lStairAlt}" oninput="M.rooms[${i}].lStairAlt=this.value"></div>
    </div>
+   ${annexBox(r,i)}
    <h3>出口(${(r.exits||[]).length})</h3>
    <table class="t"><tr><th>建具(②建具リストから選択)</th><th>仕様</th><th>接続先</th><th></th></tr>${exRows}</table>
    <button class="small" onclick="addExit(${i})">＋出口追加</button>${(M.doors||[]).length?"":`<span class="small-note warn"> ⚠ 先に「② 建具リスト」タブで建具を登録してください</span>`}
@@ -1006,6 +1108,7 @@ function addRoomCopy(i){ // 当該カードの直下にコピーを挿入
  const r=JSON.parse(JSON.stringify(src));
  r.id=nid("r"); r.name=src.name+"のコピー"; r._fold=false;
  (r.exits||[]).forEach(e=>{e.id=nid("e");});
+ ((r.annex||{}).items||[]).forEach(it=>{it.id=nid("an");});
  M.rooms.splice(i+1,0,r); renderRooms();
 }
 /* ---------- 室カードのドラッグ並べ替え(折りたたみ時) ---------- */
@@ -1099,6 +1202,17 @@ function buildReport(){
   h+=`<tr><td>${esc(r.name)}</td><td>${KIND[r.kind]}</td><td>${USES[r.useKey]?.label||""}</td><td>${fmt(r.area)}</td><td>${fmt(r.Hroom)}</td><td>${ALPHA_M[r.interior].label}(${ALPHA_M[r.interior].v})</td><td>${r.p}</td><td>${r.ql}</td><td>${fmt(alphaF(+r.ql),4)}</td><td>${{none:"なし",natural:"自然",mech:"機械",special:"特殊(1437号)"}[r.smoke?.type||"none"]}</td></tr>`;
  });
  h+=`</table>`;
+ /* 付属する居室(当該居室等) */
+ const annexAll=[];
+ model.rooms.forEach(r=>annexParts(model,r).forEach(x=>annexAll.push({owner:r,...x})));
+ if(annexAll.length){
+  h+=`<div style="font-size:11px;margin:2px 0 4px">付属する居室(当該居室を通らなければ避難することができない建築物の部分/告示509号第一号「当該居室等」)</div>
+  <table><tr><th>当該居室</th><th>付属する部分</th><th>入力方法</th><th>床面積[m²]</th><th>p[人/m²]</th><th>pAarea[人]</th><th>区画部分の合計への算入</th></tr>`;
+  annexAll.forEach(x=>{
+   h+=`<tr><td>${esc(x.owner.name)}</td><td>${esc(x.name)}</td><td>${x.fromRoom?"室一覧の室を参照":"個別入力"}</td><td>${fmt(x.area)}</td><td>${x.p}</td><td>${fmt(x.p*x.area,1)}</td><td>${x.fromRoom?"室一覧に計上済(再加算なし)":"加算"}</td></tr>`;
+  });
+  h+=`</table>`;
+ }
  /* 出口・開口部一覧 */
  const destName=e=>e.to.type==="ground"?"地上":e.to.type==="stair"?"区画外("+(((model.stairs||[]).find(s=>s.id===e.to.ref)||{}).name||"直通階段")+")":(roomById(model,e.to.ref)?.name||"?");
  h+=`<h2>2. 出口・開口部一覧</h2>`;
@@ -1128,13 +1242,15 @@ function buildReport(){
  h+=`<div style="font-size:10.5px;color:#555">避難時の使用が「不使用」の建具(防火シャッター等)は、居室出口通過時間Σ(Neff·Beff)・区画外出口通過時間Σ(Neff·Bst)の算定および最大幅出口の判定から除外し、開口部としての煙の算定(開口面積Aop・限界煙層高さHlim・煙の伝播経路)には算入しています。</div>`;
  /* 居室避難 */
  h+=`<h2>3. 居室避難の検証(告示509号第一号・第二号)</h2>`;
+ const annexExpr=rr=>rr.parts.length?`<br><span style="font-size:10px">ΣAarea = ${fmt(rr.room.area)}(当該居室) ＋ ${rr.parts.map(x=>fmt(x.area)+"("+esc(x.name)+")").join(" ＋ ")} = ${fmt(rr.sumA)} m²</span>`:"";
+ const annexPExpr=rr=>rr.parts.length?`<br><span style="font-size:10px">ΣpAarea = ${fmt((+rr.room.p||0)*rr.room.area,1)}(当該居室) ＋ ${rr.parts.map(x=>fmt(x.p*x.area,1)+"("+esc(x.name)+")").join(" ＋ ")} = ${fmt(rr.P,1)} 人</span>`:"";
  roomResults.forEach(rr=>{
   const r=rr.room;
   h+=`<h3>3.${roomResults.indexOf(rr)+1} ${esc(r.name)}</h3>
   <table><tr><th colspan="2">一. 居室避難完了時間</th></tr>
-  <tr><td>イ 居室避難開始時間 tstart=√(ΣAarea)/30</td><td>√${fmt(r.area)}/30 = <b>${fmt(rr.tstart)}分</b></td></tr>
+  <tr><td>イ 居室避難開始時間 tstart=√(ΣAarea)/30<br><span style="font-size:10px">Aarea=当該居室等の各部分の床面積</span></td><td>√${fmt(rr.sumA)}/30 = <b>${fmt(rr.tstart)}分</b>${annexExpr(rr)}</td></tr>
   <tr><td>ロ 居室歩行時間 ttravel=max Σ(l/v)</td><td>${fmt(+r.lRoomExit,1)}m / ${r.walkV}m/分 = <b>${fmt(rr.ttravel)}分</b></td></tr>
-  <tr><td>ハ 居室出口通過時間 tqueue=ΣpAarea/Σ(Neff·Beff)</td><td>${fmt(rr.P,1)}人 / ${fmt(rr.denom,1)} = <b>${fmt(rr.tqueue)}分</b><br><span style="font-size:10px">Σ(Neff·Beff) = ${nbExpr(rr.exDet.map(x=>({Neff:x.Neff,B:x.Beff})))} = ${fmt(rr.denom,1)} [人/分]</span>${beffExpr(rr)}</td></tr>
+  <tr><td>ハ 居室出口通過時間 tqueue=ΣpAarea/Σ(Neff·Beff)</td><td>${fmt(rr.P,1)}人 / ${fmt(rr.denom,1)} = <b>${fmt(rr.tqueue)}分</b>${annexPExpr(rr)}<br><span style="font-size:10px">Σ(Neff·Beff) = ${nbExpr(rr.exDet.map(x=>({Neff:x.Neff,B:x.Beff})))} = ${fmt(rr.denom,1)} [人/分]</span>${beffExpr(rr)}</td></tr>
   <tr><td>居室避難完了時間(各成分切上げの和)</td><td><b>${fmt(rr.tescR)}分</b></td></tr></table>
   <table><tr><th>出口</th><th>有効幅B[m]</th><th>Neff[人/分m]</th><th>Beff[m]</th><th>備考</th></tr>`;
   rr.exDet.forEach((x,k)=>{
@@ -1151,8 +1267,8 @@ function buildReport(){
  /* 階避難 */
  const F=floorResult;
  h+=`<div class="pagebreak"></div><h2>4. 区画避難の検証(告示509号第三号・第四号)</h2>${F.skipped?`<div>区画部分が1の居室のみのため本節の検証は省略できる(居室避難までの検証で判定)。以下は参考計算として掲載。</div>`:""}
- <table><tr><td>当該区画部分の床面積合計 ΣAarea</td><td>${fmt(F.sumA)} m²</td></tr>
- <tr><td>在館者人数 ΣpAarea(floor)</td><td>${fmt(F.sumPA,1)} 人</td></tr>
+ <table><tr><td>当該区画部分の床面積合計 ΣAarea</td><td>${fmt(F.sumA)} m²${F.annexA?`<br><span style="font-size:10px">室一覧の合計 ${fmt(F.sumA-F.annexA)} ＋ 個別入力の付属する居室 ${fmt(F.annexA)}</span>`:""}</td></tr>
+ <tr><td>在館者人数 ΣpAarea(floor)</td><td>${fmt(F.sumPA,1)} 人${F.annexPA?`<br><span style="font-size:10px">室一覧の合計 ${fmt(F.sumPA-F.annexPA,1)} ＋ 個別入力の付属する居室 ${fmt(F.annexPA,1)}</span>`:""}</td></tr>
  <tr><td>イ 区画避難開始時間 tstart=√(ΣAarea)/30 ${F.sleeping?"+5(共同住宅・ホテル等)":"+3(その他用途)"}</td><td><b>${fmt(F.tstart)} 分</b></td></tr></table>`;
  const exRooms=model.rooms.filter(r=>r.fireExempt);
  if(exRooms.length){
@@ -1262,7 +1378,9 @@ function loadSample(){
    ・建具リストに「入力確認」チェック欄を追加(図面照合用。計算・計算書には影響なし)
    ・建具リストの名称欄に並べ替えボタン(自然順・昇降切替)、行のドラッグ並べ替えを追加
    ・室の入力: 折りたたんだ室カードに⠿を表示。ドラッグ時の表示を建具と同じ差し込み線に変更
-   ・ドラッグの差し込み位置: 対象の上半分で前へ、下半分で後ろへ挿入 */
+   ・ドラッグの差し込み位置: 対象の上半分で前へ、下半分で後ろへ挿入
+   ・室の入力に「付属する居室(当該居室を通らなければ避難できない部分)」を追加
+     (告示509号第一号の当該居室等。既存室の参照/個別入力の併用。個別入力分は区画部分の合計(第三号)にも加算) */
 /* init v2.0(区画避難版) */
 renderAll();showTab("base");
 </script>
