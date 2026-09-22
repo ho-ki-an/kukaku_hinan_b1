@@ -56,11 +56,16 @@ table.t input,table.t select{padding:3px 5px;border:1px solid var(--line);border
 #doorTbl tr.chkDone td{background:#eef7ee}
 #doorTbl .sortBtn{margin-left:6px;padding:1px 6px;font-size:11px;line-height:1.4;cursor:pointer;border:1px solid var(--line);border-radius:4px;background:#fff;color:inherit}
 #doorTbl .sortBtn:hover{border-color:var(--acc);color:var(--acc)}
+#doorTbl .sortBtn.on{border-color:var(--acc);color:var(--acc);font-weight:700}
+#doorTbl .roomFilter{margin-left:6px;padding:1px 2px;font-size:11px;max-width:110px;width:auto;border:1px solid var(--line);border-radius:4px;background:#fff;cursor:pointer}
+#doorTbl .roomFilter.on{border-color:var(--acc);color:var(--acc);font-weight:700;background:#eef4fa}
+#doorTbl tr.filterInfo td{background:#eef4fa;font-size:12px;padding:4px 8px}
 @media print{#doorTbl td.dragH,#doorTbl th.dragH{display:none}}
 .foldBtn{width:28px;font-weight:700}
 .roomCard .rhead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .roomCard .rhead .nm{font-weight:700;font-size:14px}
 .badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;background:#e3ecf3;color:var(--acc);margin-left:6px}
+.badge.bRoom{background:#fde4ec}
 .ok{color:var(--ok);font-weight:700}
 .ng{color:var(--ng);font-weight:700}
 .warn{color:var(--warn)}
@@ -418,9 +423,9 @@ const USES = {
 const KIND = {room:"居室",corridor:"廊下・通路等(非居室)",lobby:"付室・バルコニー"};
 const AN = {room:0.3, corridor:0.3, lobby:0.2}; // 必要滞留面積(階段室0.25は階段側で使用)
 const DOOR = {
- d2:{label:"常閉/煙連動+遮煙 防火設備(令112条19項2号)", short:"遮煙2号", joji:true,  cls:"c2"},
- d1j:{label:"常閉/煙連動 防火設備(令112条19項1号)",     short:"常閉1号", joji:true,  cls:"c1"},
- d1:{label:"熱感連動等 防火設備(令112条19項1号)",       short:"熱感1号", joji:false, cls:"c1", hidden:true}, /* 選択肢から非表示(既存データ互換のため定義は残す) */
+ d2:{label:"令112条19項2号(常閉/煙連動+遮煙 防火設備)", short:"遮煙2号", joji:true,  cls:"c2"},
+ d1j:{label:"令112条19項1号(常閉/煙連動 防火設備)",     short:"常閉1号", joji:true,  cls:"c1"},
+ d1:{label:"令112条19項1号(熱感連動等 防火設備)",       short:"熱感1号", joji:false, cls:"c1", hidden:true}, /* 選択肢から非表示(既存データ互換のため定義は残す) */
  none:{label:"防火設備なし・その他",                    short:"その他",  joji:false, cls:"other"}
 };
 /* =========================================================
@@ -836,11 +841,28 @@ function addDoor(){ // 2つ目以降は直前のコピー
  M.doors.push(d); renderDoors(); renderRooms();
 }
 function delDoor(i){const id=M.doors[i].id;M.doors.splice(i,1);M.rooms.forEach(r=>(r.exits||[]).forEach(e=>{if(e.doorType===id)e.doorType="";}));renderDoors();renderRooms();}
+/* 使用箇所の室で絞込み(表示のみ。保存JSON・計算には影響しない) */
+let DOOR_FILTER=""; // 室id(""=すべて表示)
+function doorFilterPass(d){
+ if(!DOOR_FILTER)return true;
+ const r=roomById(M,DOOR_FILTER); if(!r)return true;
+ return (r.exits||[]).some(e=>e.doorType===d.id);
+}
+function roomFilterHTML(){
+ if(DOOR_FILTER&&!roomById(M,DOOR_FILTER))DOOR_FILTER=""; // 室が削除された場合は解除
+ const opts=M.rooms.map(r=>{const n=(M.doors||[]).filter(d=>(r.exits||[]).some(e=>e.doorType===d.id)).length;
+  return `<option value="${esc(r.id)}" ${DOOR_FILTER===r.id?"selected":""}>${esc(r.name||"(無名)")}(${n})</option>`;}).join("");
+ return `<select class="roomFilter${DOOR_FILTER?" on":""}" title="室を選ぶと、その室で使用している建具だけを表示します" onchange="setDoorFilter(this.value)"><option value="">${DOOR_FILTER?"すべて表示":"室で絞込 ▾"}</option>${opts}</select>`;
+}
+function setDoorFilter(v){ DOOR_FILTER=v||""; renderDoors(); }
 function renderDoors(){
  const t=document.getElementById("doorTbl"); if(!t)return;
  const nChk=(M.doors||[]).filter(d=>d.chk).length;
- let h=`<tr><th class="dragH" title="行をドラッグして並べ替え"></th><th class="chkCol" style="font-size:10.5px;line-height:1.2" title="入力確認：図面との照合用(計算・計算書には影響しません)">確<br>認<br><span style="font-weight:400;font-size:9.5px">${nChk}/${(M.doors||[]).length}</span></th><th class="nmCol" style="white-space:nowrap">名称<button type="button" class="sortBtn" title="名称で並べ替え(A→Z/Z→A 切替・数字は数値順)" onclick="sortDoors()">${DOOR_SORT_DIR>0?"A→Z ▲":"Z→A ▼"}</button></th><th>有効幅B[m]</th><th>開口見付幅[m]<br>(Aop用・空欄=B)</th><th>上端高さ[m]</th><th style="white-space:nowrap">避難時<br>不使用</th><th>防火設備(令112条19項)</th><th>使用箇所</th><th></th></tr>`;
+ let h=`<tr><th class="dragH" title="行をドラッグして並べ替え"></th><th class="chkCol" style="font-size:10.5px;line-height:1.2" title="入力確認：図面との照合用(計算・計算書には影響しません)">確<br>認<br><span style="font-weight:400;font-size:9.5px">${nChk}/${(M.doors||[]).length}</span></th><th class="nmCol" style="white-space:nowrap">名称${sortBtnHTML("name")}</th><th>有効幅B[m]${sortBtnHTML("width")}</th><th>開口見付幅[m]${sortBtnHTML("rawW")}<br>(Aop用・空欄=B)</th><th>上端高さ[m]${sortBtnHTML("topH")}</th><th style="white-space:nowrap">避難時${sortBtnHTML("noEvac")}<br>不使用</th><th>防火設備(令112条19項)${sortBtnHTML("cls")}</th><th style="white-space:nowrap">使用箇所${sortBtnHTML("used")}${roomFilterHTML()}</th><th></th></tr>`;
+ const fOk=doorFilterPass, nShow=(M.doors||[]).filter(fOk).length;
+ if(DOOR_FILTER) h+=`<tr class="filterInfo"><td colspan="10">絞込み中: <b>${esc(roomById(M,DOOR_FILTER)?.name||"")}</b> で使用している建具 ${nShow}件 / 全${(M.doors||[]).length}件 <button type="button" class="small" onclick="setDoorFilter('')">絞込み解除</button></td></tr>`;
  (M.doors||[]).forEach((d,i)=>{
+  if(!doorFilterPass(d))return; // 室で絞込み中は該当しない建具を非表示(データは保持)
   const used=[];M.rooms.forEach(r=>(r.exits||[]).forEach(e=>{if(e.doorType===d.id)used.push(r.name);}));
   const cls=[d.noEvac?"noEvacRow":"",d.chk?"chkDone":""].filter(Boolean).join(" ");
   h+=`<tr${cls?` class="${cls}"`:""} ondragstart="dragDoor(event,${i})" ondragover="dragOverDoor(event)" ondragleave="dragLeaveDoor(event)" ondrop="dropDoor(event,${i})" ondragend="dragEndDoor(event)">
@@ -852,18 +874,45 @@ function renderDoors(){
    <td><input type="number" step="0.05" value="${d.topH}" oninput="M.doors[${i}].topH=num(this.value)"></td>
    <td style="text-align:center"><input type="checkbox" ${d.noEvac?"checked":""} title="防火シャッター等、開口部としては存在するが避難時に通行できない建具" onchange="M.doors[${i}].noEvac=this.checked;renderDoors();renderRooms()"></td>
    <td><select onchange="M.doors[${i}].cls=this.value">${Object.entries(DOOR).filter(([k,x])=>!x.hidden||d.cls===k).map(([k,x])=>`<option value="${k}" ${d.cls===k?"selected":""}>${x.label}</option>`).join("")}</select></td>
-   <td class="small-note">${used.join("、")||"未使用"}</td>
+   <td class="small-note">${doorUsedRooms(d).join("、")||"未使用"}</td>
    <td><button class="small danger" onclick="delDoor(${i})">削除</button></td></tr>`;
  });
  t.innerHTML=h;
 }
-/* 名称の並べ替え(自然順: D2 < D10)。表示順=室の出口プルダウン・計算書の順 */
-let DOOR_SORT_DIR=1;
-function sortDoors(){
+/* 建具リストの並べ替え(各列の見出しボタン)。表示順=室の出口プルダウン・計算書の順
+   名称: 自然順(D2 < D10)/数値列: 数値順(空欄は常に末尾)/避難時不使用: 不使用が先(▲)
+   防火設備: 性能順(2号→1号→その他)/使用箇所: 室名ごと(「室の入力」の室の並び順で、最初に使用する室→建具名称の順。未使用は末尾) */
+let DOOR_SORT={key:null,dir:1};
+const DOOR_SORT_LABEL={name:"名称",width:"有効幅",rawW:"開口見付幅",topH:"上端高さ",noEvac:"避難時不使用",cls:"防火設備",used:"使用箇所(室の入力の並び順)"};
+function sortBtnHTML(key){
+ const on=DOOR_SORT.key===key;
+ const txt=on?(DOOR_SORT.dir>0?"▲":"▼"):"⇅";
+ return `<button type="button" class="sortBtn${on?" on":""}" title="${DOOR_SORT_LABEL[key]}で並べ替え(押すたびに昇順/降順を切替)" onclick="sortDoors('${key}')">${txt}</button>`;
+}
+function doorUsedRooms(d){ // 使用室名(重複除去・室の入力順)
+ const a=[];M.rooms.forEach(r=>(r.exits||[]).forEach(e=>{if(e.doorType===d.id&&!a.includes(r.name))a.push(r.name);}));return a;
+}
+function sortDoors(key){
+ key=key||"name";
+ const dir=(DOOR_SORT.key===key)? -DOOR_SORT.dir : 1;
  const col=new Intl.Collator("ja",{numeric:true,sensitivity:"base"});
- const dir=DOOR_SORT_DIR;
- (M.doors||[]).sort((a,b)=>dir*col.compare(String(a.name||""),String(b.name||"")));
- DOOR_SORT_DIR=-dir; renderDoors(); renderRooms();
+ const byName=(a,b)=>col.compare(String(a.name||""),String(b.name||""));
+ const numv=v=>(v===""||v==null||isNaN(parseFloat(v)))?null:parseFloat(v);
+ const clsOrder=Object.keys(DOOR);
+ const cmp={
+  name:(a,b)=>dir*byName(a,b),
+  width:null,rawW:null,topH:null,
+  noEvac:(a,b)=>dir*((b.noEvac?1:0)-(a.noEvac?1:0))||byName(a,b),
+  cls:(a,b)=>{const ia=clsOrder.indexOf(a.cls),ib=clsOrder.indexOf(b.cls);return dir*((ia<0?99:ia)-(ib<0?99:ib))||byName(a,b);},
+  used:(a,b)=>{const ua=doorUsedRooms(a),ub=doorUsedRooms(b);
+   if(!ua.length||!ub.length){ if(ua.length!==ub.length) return ua.length?-1:1; return byName(a,b);} // 未使用は常に末尾
+   const ri=nm=>M.rooms.findIndex(r=>r.name===nm);return dir*(ri(ua[0])-ri(ub[0]))||byName(a,b);}
+ };
+ const f=cmp[key]||((a,b)=>{const x=numv(a[key]),y=numv(b[key]);
+   if(x==null||y==null){ if(x!==y) return x==null?1:-1; return byName(a,b);} // 空欄は常に末尾
+   return dir*(x-y)||byName(a,b);});
+ (M.doors||[]).sort(f);
+ DOOR_SORT={key,dir}; renderDoors(); renderRooms();
 }
 /* 建具行のドラッグ並べ替え(左端の⠿をつかんで移動) */
 /* ドラッグ時の差し込み位置: 対象の上半分=前に挿入(上辺に線)、下半分=後ろに挿入(下辺に線) */
@@ -1052,7 +1101,7 @@ function renderRooms(){
     <td><button class="small danger" onclick="delOpening(${i},${oi})">×</button></td></tr>`).join("");
   h+=`<div class="roomCard ${r._fold?"folded":""}" ${r._fold?`draggable="true"`:""} ondragstart="dragRoom(event,${i})" ondragover="dragOverRoom(event)" ondrop="dropRoom(event,${i})" ondragleave="dragLeaveRoom(event)" ondragend="dragEndRoom(event)" onmousedown="ROOM_MD=event.target.tagName">
    <div class="rhead">
-    <span class="nm">${r._fold?`<span class="dragH" title="ドラッグして室の順番を入れ替え">⠿</span>`:""}<button class="small foldBtn" title="${r._fold?"展開":"折りたたむ"}" onclick="M.rooms[${i}]._fold=!M.rooms[${i}]._fold;renderRooms()">${r._fold?"▶":"▼"}</button> <input value="${r.name}" style="font-weight:700;border:none;border-bottom:1px solid var(--line);background:transparent;width:180px" oninput="M.rooms[${i}].name=this.value;renderStairsSoft()"><span class="badge">${KIND[r.kind]}</span>${r._fold?`<span class="small-note"> ${USES[r.useKey]?.label||""} / A=${r.area}m² / 天井高${r.Hroom}m / 出口${(r.exits||[]).length} / 排煙:${{none:"なし",natural:"自然",mech:"機械",special:"特殊"}[(r.smoke||{}).type||"none"]}</span>`:""}</span>
+    <span class="nm">${r._fold?`<span class="dragH" title="ドラッグして室の順番を入れ替え">⠿</span>`:""}<button class="small foldBtn" title="${r._fold?"展開":"折りたたむ"}" onclick="M.rooms[${i}]._fold=!M.rooms[${i}]._fold;renderRooms()">${r._fold?"▶":"▼"}</button> <input value="${r.name}" style="font-weight:700;border:none;border-bottom:1px solid var(--line);background:transparent;width:180px" oninput="M.rooms[${i}].name=this.value;renderStairsSoft()"><span class="badge${r.kind==="room"?" bRoom":""}">${KIND[r.kind]}</span>${r._fold?`<span class="small-note"> ${USES[r.useKey]?.label||""} / A=${r.area}m² / 天井高${r.Hroom}m / 出口${(r.exits||[]).length} / 排煙:${{none:"なし",natural:"自然",mech:"機械",special:"特殊"}[(r.smoke||{}).type||"none"]}</span>`:""}</span>
     <button class="small danger" onclick="delRoom(${i})">室を削除</button>
    </div>
    <div class="grid" style="margin-top:8px">
@@ -1412,6 +1461,10 @@ function loadSample(){
      (告示509号第一号の当該居室等。既存室の参照/個別入力の併用。個別入力分は区画部分の合計(第三号)にも加算) */
 /* v2.2 変更点:
    ・④判定結果の区画避難(火災室ごと)欄に計算式(数値代入)を明示: tstart・ttravel・tqueue→tesc、支配経路の各室ts→ts(comp)、判定
+   ・室の入力: 居室のバッジ背景を薄いピンクに(廊下・通路等は従来どおり)
+   ・建具リスト: 名称以外の各列(有効幅・見付幅・上端高さ・避難時不使用・防火設備・使用箇所)にも並べ替えボタンを追加。使用箇所は室の入力の並び順で室ごとにまとまる
+   ・建具リスト: 使用箇所欄に「室で絞込」を追加(選んだ室で使用している建具のみ表示。表示のみで保存・計算には影響なし)
+   ・防火設備の表示を「令112条19項○号(扉性能)」の順に変更
    ・計算書4.xのロ 歩行時間の行に l／v の数値代入式を追記
    ・計算書4.xの区画避難完了時間・区画煙降下時間の行に合計式を追記 */
 /* init v2.0(区画避難版) */
