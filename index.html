@@ -97,6 +97,26 @@ tr.noEvacRow>td{background:#fbf1e3}
 .annexHead .ttl{font-weight:700;font-size:13px}
 .annexBody{padding:0 10px 10px}
 .annexBody .small-note{margin-top:4px}
+/* ---------- しおり・出口行ドラッグ ---------- */
+.exTbl td.exH,.exTbl th.exH{width:44px;padding-left:2px;padding-right:2px;text-align:center;white-space:nowrap;position:relative}
+.exTbl .dragX{cursor:grab;color:#9aa5b1;font-size:15px;user-select:none;padding:0 2px}
+.exTbl .dragX:hover{color:var(--acc)}
+.exTbl tr.dropBefore td{box-shadow:inset 0 3px 0 var(--acc)}
+.exTbl tr.dropAfter td{box-shadow:inset 0 -3px 0 var(--acc)}
+.exTbl tr.dragging{opacity:.4}
+.bmBtn{border:1px solid var(--line);background:#fff;border-radius:4px;color:#b8c2cc;font-size:11px;line-height:1.3;padding:1px 4px;cursor:pointer}
+.bmBtn:hover{color:#e0301e;border-color:#e0301e}
+.bmBtn.on{background:#e0301e;border-color:#e0301e;color:#fff}
+.exTbl tr.bmRow td{box-shadow:inset 0 -3px 0 #e0301e}
+.exTbl tr.bmRow td.exH::after{content:"▶";color:#e0301e;position:absolute;left:-15px;bottom:-10px;font-size:15px;line-height:1}
+.bmLine{display:flex;align-items:center;gap:6px;color:#e0301e;font-size:12px;font-weight:700;margin:-4px 0 6px}
+.bmLine::after{content:"";flex:1;height:3px;background:#e0301e;border-radius:2px}
+.bmBar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0 8px;padding:6px 10px;border:1px solid #f1b8b0;background:#fdf1ef;border-radius:6px;font-size:12.5px}
+.bmBar b{color:#e0301e}
+.bmTag{display:inline-block;padding:0 7px;border-radius:10px;font-size:11px;background:#e0301e;color:#fff;margin-left:6px}
+@keyframes bmFlash{from{background:#fde2de}to{background:transparent}}
+.bmFlash td,.bmFlash{animation:bmFlash 1.6s ease-out}
+@media (prefers-reduced-motion: reduce){.bmFlash td,.bmFlash{animation:none}}
 @media print{
  body{background:#fff;font-size:11px}
  header,.toolbar,#inputArea,#resultsArea,.no-print{display:none !important}
@@ -330,6 +350,7 @@ tr.noEvacRow>td{background:#fbf1e3}
  <button data-tab="rooms" onclick="showTab('rooms')">③ 室の入力</button>
  <button data-tab="results" onclick="showTab('results')">④ 判定結果</button>
  <button data-tab="report" onclick="showTab('report')">⑤ 計算書</button>
+ <button data-tab="prorate" onclick="showTab('prorate')">⑥ 按分計算</button>
 </nav>
 <div id="inputArea">
 <div id="pane-base">
@@ -369,10 +390,30 @@ tr.noEvacRow>td{background:#fbf1e3}
 <div class="card">
  <h2>3. 室の入力(当該区画部分内の全ての室・廊下等)</h2>
  <div style="margin:2px 0 6px"><button class="small" onclick="foldAll(true)">すべて折りたたむ</button> <button class="small" onclick="foldAll(false)">すべて展開</button> <span class="small-note">折りたたんだカードは、見出し左の⠿(またはカード全体)をドラッグして順番を入れ替えできます</span></div>
+ <div id="bmBarArea"></div>
  <div id="roomsArea"></div>
  <button class="small" onclick="addRoom()">＋室を追加</button>
 </div>
 </div><!-- pane-rooms -->
+<div id="pane-prorate" style="display:none">
+<div class="card">
+ <h2>6-1. 用途混在室の在館者密度・積載可燃物発熱量(面積按分)</h2>
+ <div class="small-note">1の室に複数の用途部分が混在する場合に、用途部分ごとの床面積から室の p・ql を按分します。p は在館者数が一致するよう面積加重平均(Σp<sub>i</sub>A<sub>i</sub>/ΣA<sub>i</sub>)、ql は面積加重平均または最大値(安全側)を選択できます。結果は「室へ反映」で③室の入力に書き込みます。</div>
+ <div id="prMixArea"></div>
+ <button class="small" onclick="prAddMix()">＋按分表を追加</button>
+</div>
+<div class="card">
+ <h2>6-2. 歩行時間の合算(条件の異なる区間の Σ l<sub>i</sub>/v<sub>i</sub>)</h2>
+ <div class="small-note">避難経路を歩行速度の異なる区間(用途・階段の上り/下り・客席部分など)に分け、区間ごとの歩行時間 l<sub>i</sub>/v<sub>i</sub> を合計します。室の入力は歩行速度 v を1つしか持たないため、「室へ反映」では合計時間を当該室の v で割り戻した<b>換算歩行距離</b> l<sub>eq</sub>=Σ(l<sub>i</sub>/v<sub>i</sub>)×v(0.1m単位切上げ)を指定の距離欄に書き込みます。</div>
+ <div id="prWalkArea"></div>
+ <button class="small" onclick="prAddWalk()">＋歩行経路を追加</button>
+</div>
+<div class="card">
+ <div class="legalref">
+  <b>留意事項</b>: ①告示の表は室(居室の種類)ごとに在館者密度・積載可燃物発熱量を定めており、1室内に複数用途が混在する場合の按分方法は告示に明示されていません。面積按分の採否・区分の考え方は確認審査機関等と事前に協議してください。②αf は ql の5/3乗に比例するため、ql の面積加重平均は発熱量が大きい部分の影響を平均化します。可燃物の多い部分が偏在する場合は「最大値(安全側)」を検討してください。③就寝用途を含む場合は、③室の入力の用途を就寝用途に設定してください(避難開始時間の加算に使用)。④按分表・歩行経路の内容は⑤計算書の末尾「付録 按分計算」に出力されます。反映後に室の入力値や歩行速度を変更した場合は、付録に不一致の警告が出ます。
+ </div>
+</div>
+</div><!-- pane-prorate -->
 </div><!-- inputArea -->
 
 <div class="card no-print" id="resultsArea" style="display:none">
@@ -936,8 +977,9 @@ function dropDoor(ev,i){
  DRAG_D=null;renderDoors();if(moved)renderRooms();
 }
 /* ---------- タブ ---------- */
-const PANES={base:"pane-base",doors:"pane-doors",rooms:"pane-rooms",results:"resultsArea",report:"report"};
+const PANES={base:"pane-base",doors:"pane-doors",rooms:"pane-rooms",results:"resultsArea",report:"report",prorate:"pane-prorate"};
 function showTab(name){
+ if(name==="prorate")renderProrate();
  for(const [k,id] of Object.entries(PANES)){
   const el=document.getElementById(id); if(el) el.style.display=(k===name)?"":"none";
  }
@@ -1084,7 +1126,8 @@ function renderRooms(){
   const useOpts=Object.entries(USES).map(([k,u])=>`<option value="${k}" ${r.useKey===k?"selected":""}>${u.label}</option>`).join("");
   const kindOpts=Object.entries(KIND).map(([k,l])=>`<option value="${k}" ${r.kind===k?"selected":""}>${l}</option>`).join("");
   const intOpts=Object.entries(ALPHA_M).map(([k,o])=>`<option value="${k}" ${r.interior===k?"selected":""}>${o.label}(αm=${o.v})</option>`).join("");
-  let exRows=(r.exits||[]).map((e,ei)=>{const sp=doorSpecFrom(M,e);return `<tr${sp.noEvac&&e.doorType?' class="noEvacRow"':""}>
+  let exRows=(r.exits||[]).map((e,ei)=>{const sp=doorSpecFrom(M,e);const bmOn=!!(M.bookmark&&e.id&&M.bookmark.exitId===e.id);const cl=[sp.noEvac&&e.doorType?"noEvacRow":"",bmOn?"bmRow":""].filter(Boolean).join(" ");return `<tr${cl?` class="${cl}"`:""} ondragstart="dragExit(event,${i},${ei})" ondragover="dragOverExit(event,${i})" ondragleave="dragLeaveExit(event)" ondrop="dropExit(event,${i},${ei})" ondragend="dragEndExit(event)">
+    <td class="exH"><span class="dragX" title="ドラッグして出口の順番を入れ替え" onmousedown="this.closest('tr').draggable=true" onmouseup="this.closest('tr').draggable=false">⠿</span><button class="bmBtn${bmOn?" on":""}" title="${bmOn?"しおりを外す":"この行までを入力済みとしてしおりを挟む"}" onclick="bmSetExit(${i},${ei})">栞</button></td>
     <td><select onchange="M.rooms[${i}].exits[${ei}].doorType=this.value;renderRooms()">
       <option value="">(建具を選択)</option>
       ${(M.doors||[]).map(d=>`<option value="${d.id}" ${e.doorType===d.id?"selected":""}>${d.name}: B=${d.width}m/上端${d.topH}m/${(DOOR[d.cls]||DOOR.none).short}${d.noEvac?"/避難時不使用":""}</option>`).join("")}
@@ -1101,8 +1144,8 @@ function renderRooms(){
     <td><button class="small danger" onclick="delOpening(${i},${oi})">×</button></td></tr>`).join("");
   h+=`<div class="roomCard ${r._fold?"folded":""}" ${r._fold?`draggable="true"`:""} ondragstart="dragRoom(event,${i})" ondragover="dragOverRoom(event)" ondrop="dropRoom(event,${i})" ondragleave="dragLeaveRoom(event)" ondragend="dragEndRoom(event)" onmousedown="ROOM_MD=event.target.tagName">
    <div class="rhead">
-    <span class="nm">${r._fold?`<span class="dragH" title="ドラッグして室の順番を入れ替え">⠿</span>`:""}<button class="small foldBtn" title="${r._fold?"展開":"折りたたむ"}" onclick="M.rooms[${i}]._fold=!M.rooms[${i}]._fold;renderRooms()">${r._fold?"▶":"▼"}</button> <input value="${r.name}" style="font-weight:700;border:none;border-bottom:1px solid var(--line);background:transparent;width:180px" oninput="M.rooms[${i}].name=this.value;renderStairsSoft()"><span class="badge${r.kind==="room"?" bRoom":""}">${KIND[r.kind]}</span>${r._fold?`<span class="small-note"> ${USES[r.useKey]?.label||""} / A=${r.area}m² / 天井高${r.Hroom}m / 出口${(r.exits||[]).length} / 排煙:${{none:"なし",natural:"自然",mech:"機械",special:"特殊"}[(r.smoke||{}).type||"none"]}</span>`:""}</span>
-    <button class="small danger" onclick="delRoom(${i})">室を削除</button>
+    <span class="nm">${r._fold?`<span class="dragH" title="ドラッグして室の順番を入れ替え">⠿</span>`:""}<button class="small foldBtn" title="${r._fold?"展開":"折りたたむ"}" onclick="M.rooms[${i}]._fold=!M.rooms[${i}]._fold;renderRooms()">${r._fold?"▶":"▼"}</button> <input value="${r.name}" style="font-weight:700;border:none;border-bottom:1px solid var(--line);background:transparent;width:180px" oninput="M.rooms[${i}].name=this.value;renderStairsSoft()"><span class="badge${r.kind==="room"?" bRoom":""}">${KIND[r.kind]}</span>${M.bookmark&&M.bookmark.roomId===r.id?`<span class="bmTag">しおり</span>`:""}${r._fold?`<span class="small-note"> ${USES[r.useKey]?.label||""} / A=${r.area}m² / 天井高${r.Hroom}m / 出口${(r.exits||[]).length} / 排煙:${{none:"なし",natural:"自然",mech:"機械",special:"特殊"}[(r.smoke||{}).type||"none"]}</span>`:""}</span>
+    <span><button class="bmBtn${M.bookmark&&M.bookmark.roomId===r.id&&!M.bookmark.exitId?" on":""}" style="padding:2px 7px;font-size:12px" title="この室までを入力済みとしてしおりを挟む" onclick="bmSetRoom(${i})">しおり</button> <button class="small danger" onclick="delRoom(${i})">室を削除</button></span>
    </div>
    <div class="grid" style="margin-top:8px">
     <div class="f"><label>区分</label><select onchange="M.rooms[${i}].kind=this.value;renderRooms()">${kindOpts}</select></div>
@@ -1123,7 +1166,7 @@ function renderRooms(){
    </div>
    ${annexBox(r,i)}
    <h3>出口(${(r.exits||[]).length})</h3>
-   <table class="t"><tr><th>建具(②建具リストから選択)</th><th>仕様</th><th>接続先</th><th></th></tr>${exRows}</table>
+   <table class="t exTbl"><tr><th class="exH" title="⠿=ドラッグで並べ替え/栞=しおり"></th><th>建具(②建具リストから選択)</th><th>仕様</th><th>接続先</th><th></th></tr>${exRows}</table>
    <button class="small" onclick="addExit(${i})">＋出口追加</button>${(M.doors||[]).length?"":`<span class="small-note warn"> ⚠ 先に「② 建具リスト」タブで建具を登録してください</span>`}
    <h3>排煙設備(有効排煙量 Ve)</h3>
    <div class="grid">
@@ -1147,9 +1190,10 @@ function renderRooms(){
    <button class="small" onclick="addOpening(${i})">＋排煙口追加</button>
    <div class="small-note">開口部の限界煙層高さ以上の部分から As・hs・Hc を自動算定します(基準点=床面と仮定)。全開口が同時開放(相互30m以内)として算定。</div>`:""}
    <div style="margin-top:10px;border-top:1px dashed var(--line);padding-top:6px"><button class="small" onclick="addRoomCopy(${i})">＋この室のコピーを下に追加</button></div>
-  </div>`;
+  </div>`+(M.bookmark&&M.bookmark.roomId===r.id&&!M.bookmark.exitId?`<div class="bmLine">▶ しおり(ここまで入力済み)</div>`:"");
  });
  area.innerHTML=h;
+ const bb=document.getElementById("bmBarArea"); if(bb) bb.innerHTML=bmBarHTML();
 }
 function renderStairsSoft(){/* 名称変更時の軽量更新は省略(計算時に反映) */}
 function foldAll(v){M.rooms.forEach(r=>r._fold=v);renderRooms();}
@@ -1378,6 +1422,7 @@ function buildReport(){
  h+=`<h2>5. 総合判定</h2><div style="font-size:14px" class="${all?"j-ok":"j-ng"}">${all?"当該区画部分は区画避難安全性能を有することが確かめられた(OK)":"不適合項目があります(NG)"}</div>
  <div style="margin-top:8px;font-size:10.5px;color:#555">検証により適用除外となり得る規定は令128条の7第1項に掲げる規定によります(排煙設備の設置・構造及び内装制限のみ)。適用除外規定は本ツールの対象外につき別途確認してください。</div>
  </div>`;
+ h+=prorateReportHTML();
  document.getElementById("report").innerHTML=h;
 }
 function printReport(){ if(!LAST){alert("先に「計算実行」を押してください");return;} showTab("report"); window.print(); }
@@ -1404,7 +1449,7 @@ function renderAll(){
  document.getElementById("floorName").value=M.floorName||"";
  document.getElementById("isEscape").value=M.isEscape?"1":"0";
  document.getElementById("singleRoom").value=M.singleRoom?"1":"0";
- renderStairs();renderDoors();renderRooms();
+ renderStairs();renderDoors();renderRooms();renderProrate();
 }
 /* サンプル: 「避難安全検証法の解説及び計算例とその解説」5.8 物流倉庫の事務室
    (令2国交告509号 区画避難安全検証法) pp.222-226
@@ -1469,6 +1514,223 @@ function loadSample(){
    ・計算書4.xの区画避難完了時間・区画煙降下時間の行に合計式を追記 */
 /* init v2.0(区画避難版) */
 renderAll();showTab("base");
+/* ---------- しおり(入力の中断位置) ---------- */
+function bmInfo(){
+ const b=M.bookmark; if(!b||!b.roomId) return null;
+ const ri=M.rooms.findIndex(r=>r.id===b.roomId);
+ if(ri<0) return {b,lost:true};
+ if(!b.exitId) return {b,ri,ei:-1};
+ const ei=(M.rooms[ri].exits||[]).findIndex(e=>e.id===b.exitId);
+ return ei<0?{b,ri,lost:true}:{b,ri,ei};
+}
+function bmStamp(){const d=new Date(),z=n=>String(n).padStart(2,"0");return `${d.getMonth()+1}/${d.getDate()} ${z(d.getHours())}:${z(d.getMinutes())}`;}
+function bmSetExit(ri,ei){
+ const e=M.rooms[ri].exits[ei]; if(!e.id) e.id=nid("e");
+ const b=M.bookmark;
+ M.bookmark=(b&&b.exitId===e.id)?null:{roomId:M.rooms[ri].id,exitId:e.id,at:bmStamp()};
+ renderRooms();
+}
+function bmSetRoom(ri){
+ const r=M.rooms[ri],b=M.bookmark;
+ M.bookmark=(b&&b.roomId===r.id&&!b.exitId)?null:{roomId:r.id,exitId:null,at:bmStamp()};
+ renderRooms();
+}
+function bmClear(){M.bookmark=null;renderRooms();}
+function bmGo(){
+ const k=bmInfo(); if(!k||k.lost) return;
+ M.rooms[k.ri]._fold=false; renderRooms(); showTab("rooms");
+ const card=document.querySelectorAll("#roomsArea .roomCard")[k.ri]; if(!card) return;
+ const el=k.ei>=0?card.querySelector("tr.bmRow"):(card.nextElementSibling||card);
+ (el||card).scrollIntoView({block:"center",behavior:"smooth"});
+ if(el){el.classList.remove("bmFlash");void el.offsetWidth;el.classList.add("bmFlash");}
+}
+function bmBarHTML(){
+ const k=bmInfo();
+ if(!k) return `<div class="bmBar"><span>しおり: なし</span><span class="small-note">出口の行の左端「栞」ボタン、又は室の見出しの「しおり」ボタンで、入力を中断した位置に印を付けられます(JSON保存時も保持)。</span></div>`;
+ if(k.lost) return `<div class="bmBar"><b>しおり</b><span>の位置(室又は出口)が削除されています。</span><button class="small" onclick="bmClear()">しおりを外す</button></div>`;
+ const r=M.rooms[k.ri];
+ const where=k.ei>=0?`「${esc(r.name)}」の出口 ${k.ei+1}行目まで`:`「${esc(r.name)}」まで`;
+ return `<div class="bmBar"><b>しおり</b><span>${where}入力済み(${k.b.at||""}) / 室 ${k.ri+1}/${M.rooms.length}</span><button class="small" onclick="bmGo()">しおりへ移動</button><button class="small" onclick="bmClear()">しおりを外す</button></div>`;
+}
+/* ---------- 出口行のドラッグ並べ替え(同一室内) ---------- */
+let DRAG_X=null;
+function dragExit(ev,ri,ei){if(ev.target!==ev.currentTarget)return;ev.stopPropagation();DRAG_X={ri,ei};ev.dataTransfer.effectAllowed="move";try{ev.dataTransfer.setData("text/plain","exit"+ei);}catch(e){}ev.currentTarget.classList.add("dragging");}
+function dragOverExit(ev,ri){if(!DRAG_X||DRAG_X.ri!==ri)return;ev.preventDefault();ev.stopPropagation();ev.dataTransfer.dropEffect="move";markDrop(ev);}
+function dragLeaveExit(ev){clearDrop(ev.currentTarget);}
+function dragEndExit(ev){DRAG_X=null;ev.currentTarget.draggable=false;document.querySelectorAll(".exTbl .dropBefore,.exTbl .dropAfter,.exTbl .dragging").forEach(el=>el.classList.remove("dropBefore","dropAfter","dragging"));}
+function dropExit(ev,ri,ei){
+ if(!DRAG_X||DRAG_X.ri!==ri)return;
+ ev.preventDefault();ev.stopPropagation();const pos=dropPos(ev);clearDrop(ev.currentTarget);
+ const moved=moveItem(M.rooms[ri].exits,DRAG_X.ei,ei,pos);
+ DRAG_X=null;if(moved)renderRooms();
+}
+/* =========================================================
+   ⑥ 按分計算(用途混在室の p・ql/条件の異なる区間の歩行時間)
+   ========================================================= */
+function PR(){ if(!M.prorate||typeof M.prorate!=="object") M.prorate={mix:[],walk:[]}; M.prorate.mix=M.prorate.mix||[]; M.prorate.walk=M.prorate.walk||[]; return M.prorate; }
+function escA(s){return String(s??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
+function ceilN(x,d){const k=Math.pow(10,d);return Math.ceil(x*k-1e-9)/k;}
+const PR_WALK_FIELD={lRoomExit:"居室出口までの歩行距離",lStair:"直通階段出口までの歩行距離",lStairAlt:"同(火災室で最大幅出口除外時)"};
+const PR_SEG={other:"水平部分(その他)",up:"階段(上り)",down:"階段(下り)",seat:"客席部分"};
+function prRoomOpts(sel){
+ return `<option value="">(反映先の室を選択)</option>`+M.rooms.map(r=>`<option value="${escA(r.id)}" ${r.id===sel?"selected":""}>${esc(r.name)}</option>`).join("")
+  +(sel&&!M.rooms.some(r=>r.id===sel)?`<option value="${escA(sel)}" selected>(削除された室)</option>`:"");
+}
+/* ---- 計算(純関数) ---- */
+function prMixCalc(mx){
+ const rows=(mx.rows||[]).map(r=>({...r,A:+r.area||0,pv:(r.p===""||r.p==null)?NaN:+r.p,qv:(r.ql===""||r.ql==null)?NaN:+r.ql}));
+ const valid=rows.filter(r=>r.A>0);
+ const sumA=valid.reduce((s,r)=>s+r.A,0);
+ const warns=[];
+ if(valid.some(r=>isNaN(r.pv)))warns.push("在館者密度が未入力の行があります(固定席は座席数÷床面積を入力)");
+ if(valid.some(r=>isNaN(r.qv)))warns.push("積載可燃物発熱量が未入力の行があります");
+ const sumPA=valid.reduce((s,r)=>s+(isNaN(r.pv)?0:r.pv*r.A),0);
+ const sumQA=valid.reduce((s,r)=>s+(isNaN(r.qv)?0:r.qv*r.A),0);
+ const pEq=sumA>0?ceilN(sumPA/sumA,4):0;
+ const qAvg=sumA>0?Math.ceil(sumQA/sumA-1e-9):0;
+ const qMax=valid.length?Math.max(...valid.map(r=>isNaN(r.qv)?0:r.qv)):0;
+ const qEq=mx.qlMode==="max"?qMax:qAvg;
+ const room=M.rooms.find(r=>r.id===mx.roomId);
+ if(room && sumA>0 && Math.abs((+room.area||0)-sumA)>0.005)warns.push(`按分面積の合計(${fmt(sumA)}m²)と室の床面積(${fmt(+room.area||0)}m²)が一致しません`);
+ const speeds=[...new Set(valid.map(r=>USES[r.useKey]?WALKCAT[USES[r.useKey].cat].other:null).filter(v=>v!=null))];
+ const sleep=valid.some(r=>USES[r.useKey]?.sleep);
+ return {rows:valid,sumA,sumPA,sumQA,pEq,qAvg,qMax,qEq,room,warns,speeds,sleep};
+}
+function prWalkCalc(wk){
+ const rows=(wk.rows||[]).map(s=>{const l=+s.l||0,v=+s.v||0;return {...s,lv:l,vv:v,t:(v>0?l/v:(l>0?Infinity:0))};}).filter(s=>s.lv>0);
+ const sumL=rows.reduce((a,s)=>a+s.lv,0);
+ const sumT=rows.reduce((a,s)=>a+s.t,0);
+ const room=M.rooms.find(r=>r.id===wk.roomId);
+ const vRoom=room?(+room.walkV||60):null;
+ const lEq=(room&&isFinite(sumT))?ceilN(sumT*vRoom,1):null;
+ const warns=[];
+ if(rows.some(s=>!(s.vv>0)))warns.push("歩行速度が0または未入力の区間があります");
+ return {rows,sumL,sumT,room,vRoom,lEq,warns};
+}
+function prSegV(cat,type){const c=WALKCAT[cat]||WALKCAT.office;const v=c[type];return v==null?"":v;}
+/* ---- 操作 ---- */
+function prAddMix(){PR().mix.push({id:nid("pm"),name:"按分表"+(PR().mix.length+1),roomId:"",qlMode:"avg",rows:[prNewMixRow("office"),prNewMixRow("meeting")]});renderProrate();}
+function prNewMixRow(k){const u=USES[k];return {name:u.label,useKey:k,area:"",p:u.p==null?"":u.p,ql:u.ql};}
+function prMixUse(mi,ri,k){const r=PR().mix[mi].rows[ri],u=USES[k];r.useKey=k;r.p=u.p==null?"":u.p;r.ql=u.ql;if(!r.name||Object.values(USES).some(x=>x.label===r.name))r.name=u.label;renderProrate();}
+function prApplyMix(mi){
+ const mx=PR().mix[mi],c=prMixCalc(mx);
+ if(!c.room){alert("反映先の室を選択してください");return;}
+ if(!(c.sumA>0)){alert("用途部分の床面積を入力してください");return;}
+ c.room.p=c.pEq; c.room.ql=c.qEq; mx.applied={p:c.pEq,ql:c.qEq};
+ renderRooms();renderProrate();
+}
+function prAddWalk(){PR().walk.push({id:nid("pw"),name:"歩行経路"+(PR().walk.length+1),roomId:"",field:"lStair",rows:[{name:"区間1",cat:"office",type:"other",l:"",v:WALKCAT.office.other},{name:"区間2",cat:"office",type:"down",l:"",v:WALKCAT.office.down}]});renderProrate();}
+function prSegSet(wi,si,key,val){const s=PR().walk[wi].rows[si];s[key]=val;if(key==="cat"||key==="type"){if(s.type==="seat"&&WALKCAT[s.cat].seat==null){s.type="other";}s.v=prSegV(s.cat,s.type);}renderProrate();}
+function prApplyWalk(wi){
+ const wk=PR().walk[wi],c=prWalkCalc(wk);
+ if(!c.room){alert("反映先の室を選択してください");return;}
+ if(c.lEq==null){alert("歩行時間を算定できません(区間の距離・速度を確認してください)");return;}
+ c.room[wk.field]=c.lEq; wk.applied={l:c.lEq,v:c.vRoom};
+ renderRooms();renderProrate();
+}
+function prDel(kind,i){PR()[kind].splice(i,1);renderProrate();}
+/* ---- 描画 ---- */
+function renderProrate(){
+ const P=PR();
+ const useOpts=k=>Object.entries(USES).map(([key,u])=>`<option value="${key}" ${key===k?"selected":""}>${u.label}</option>`).join("");
+ let h="";
+ P.mix.forEach((mx,mi)=>{
+  const c=prMixCalc(mx);
+  const rows=(mx.rows||[]).map((r,ri)=>{const A=+r.area||0;return `<tr>
+   <td><input value="${escA(r.name)}" oninput="PR().mix[${mi}].rows[${ri}].name=this.value"></td>
+   <td><select onchange="prMixUse(${mi},${ri},this.value)">${useOpts(r.useKey)}</select></td>
+   <td><input type="number" step="0.01" value="${r.area}" oninput="PR().mix[${mi}].rows[${ri}].area=num(this.value)" onchange="renderProrate()"></td>
+   <td><input type="number" step="0.001" value="${r.p}" placeholder="${USES[r.useKey]?.pNote?"座席数÷面積":""}" oninput="PR().mix[${mi}].rows[${ri}].p=num(this.value)" onchange="renderProrate()"></td>
+   <td><input type="number" step="1" value="${r.ql}" oninput="PR().mix[${mi}].rows[${ri}].ql=num(this.value)" onchange="renderProrate()"></td>
+   <td style="text-align:right">${A>0&&r.p!==""?fmt((+r.p)*A,2):"—"}</td>
+   <td style="text-align:right">${A>0&&r.ql!==""?fmt((+r.ql)*A,0):"—"}</td>
+   <td><button class="small danger" onclick="PR().mix[${mi}].rows.splice(${ri},1);renderProrate()">×</button></td></tr>`;}).join("");
+  const stale=mx.applied&&c.room&&(+c.room.p!==mx.applied.p||+c.room.ql!==mx.applied.ql);
+  h+=`<div class="roomCard">
+   <div class="rhead"><span class="nm"><input value="${escA(mx.name)}" style="font-weight:700;width:220px" oninput="PR().mix[${mi}].name=this.value"></span>
+    <button class="small danger" onclick="prDel('mix',${mi})">按分表を削除</button></div>
+   <div class="grid" style="margin-top:8px">
+    <div class="f"><label>反映先の室</label><select onchange="PR().mix[${mi}].roomId=this.value;renderProrate()">${prRoomOpts(mx.roomId)}</select></div>
+    <div class="f"><label>ql の按分方法</label><select onchange="PR().mix[${mi}].qlMode=this.value;renderProrate()"><option value="avg" ${mx.qlMode!=="max"?"selected":""}>面積加重平均</option><option value="max" ${mx.qlMode==="max"?"selected":""}>最大値(安全側)</option></select></div>
+   </div>
+   <div style="overflow-x:auto"><table class="t"><tr><th>部分の名称</th><th>用途(p・ql 自動設定)</th><th>床面積 A<sub>i</sub>[m²]</th><th>p<sub>i</sub>[人/m²]</th><th>ql<sub>i</sub>[MJ/m²]</th><th>p<sub>i</sub>A<sub>i</sub>[人]</th><th>ql<sub>i</sub>A<sub>i</sub>[MJ]</th><th></th></tr>${rows}
+    <tr><th colspan="2">合計</th><th style="text-align:right">${fmt(c.sumA)}</th><th></th><th></th><th style="text-align:right">${fmt(c.sumPA,2)}</th><th style="text-align:right">${fmt(c.sumQA,0)}</th><th></th></tr></table></div>
+   <button class="small" onclick="PR().mix[${mi}].rows.push(prNewMixRow('office'));renderProrate()">＋用途部分を追加</button>
+   <div class="fx">p = Σp<sub>i</sub>A<sub>i</sub> / ΣA<sub>i</sub> = ${fmt(c.sumPA,2)} / ${fmt(c.sumA)} = <b>${c.pEq}</b> 人/m²(小数第4位切上げ)<br>
+    ql = ${mx.qlMode==="max"?`max(ql<sub>i</sub>) = <b>${c.qMax}</b>`:`Σql<sub>i</sub>A<sub>i</sub> / ΣA<sub>i</sub> = ${fmt(c.sumQA,0)} / ${fmt(c.sumA)} = <b>${c.qAvg}</b>`} MJ/m²${mx.qlMode==="max"?"":"(整数切上げ)"}
+    ${c.speeds.length>1?`<br><span class="warn">構成用途の歩行速度(その他部分)が異なります: ${c.speeds.join("・")} m/分 → 室の v は安全側で ${Math.min(...c.speeds)} m/分、又は6-2の区間合算で設定してください</span>`:""}
+    ${c.sleep?`<br><span class="warn">就寝用途を含みます → ③室の入力の用途を就寝用途に設定してください</span>`:""}</div>
+   ${c.warns.map(w=>`<div class="warn small-note">⚠ ${esc(w)}</div>`).join("")}
+   <div style="margin-top:6px"><button class="small primary" onclick="prApplyMix(${mi})">室へ反映(p=${c.pEq}・ql=${c.qEq})</button>
+    ${c.room?`<span class="small-note"> 現在の室の値: p=${c.room.p}・ql=${c.room.ql}</span>`:""}${stale?`<span class="warn small-note"> ⚠ 反映後に室の値が変更されています</span>`:""}</div>
+  </div>`;
+ });
+ if(!P.mix.length)h='<div class="note">按分表はまだありません。「＋按分表を追加」で作成します。</div>';
+ document.getElementById("prMixArea").innerHTML=h;
+
+ let w="";
+ P.walk.forEach((wk,wi)=>{
+  const c=prWalkCalc(wk);
+  const catOpts=k=>Object.entries(WALKCAT).map(([key,x])=>`<option value="${key}" ${key===k?"selected":""}>${x.label}</option>`).join("");
+  const rows=(wk.rows||[]).map((s,si)=>{const l=+s.l||0,v=+s.v||0;const std=prSegV(s.cat,s.type);return `<tr>
+   <td><input value="${escA(s.name)}" oninput="PR().walk[${wi}].rows[${si}].name=this.value"></td>
+   <td><select onchange="prSegSet(${wi},${si},'cat',this.value)">${catOpts(s.cat)}</select></td>
+   <td style="min-width:130px"><select onchange="prSegSet(${wi},${si},'type',this.value)">${Object.entries(PR_SEG).filter(([k])=>k!=="seat"||WALKCAT[s.cat].seat!=null).map(([k,l])=>`<option value="${k}" ${k===s.type?"selected":""}>${l}</option>`).join("")}</select></td>
+   <td><input type="number" step="0.1" value="${s.l}" oninput="PR().walk[${wi}].rows[${si}].l=num(this.value)" onchange="renderProrate()"></td>
+   <td><input type="number" step="1" value="${s.v}" oninput="PR().walk[${wi}].rows[${si}].v=num(this.value)" onchange="renderProrate()">${std!==""&&+s.v!==+std?`<div class="warn small-note">表の値 ${std}</div>`:""}</td>
+   <td style="text-align:right">${l>0&&v>0?fmt(l/v,3):"—"}</td>
+   <td><button class="small danger" onclick="PR().walk[${wi}].rows.splice(${si},1);renderProrate()">×</button></td></tr>`;}).join("");
+  const stale=wk.applied&&c.room&&(+c.room[wk.field]!==wk.applied.l||+c.room.walkV!==wk.applied.v);
+  w+=`<div class="roomCard">
+   <div class="rhead"><span class="nm"><input value="${escA(wk.name)}" style="font-weight:700;width:220px" oninput="PR().walk[${wi}].name=this.value"></span>
+    <button class="small danger" onclick="prDel('walk',${wi})">歩行経路を削除</button></div>
+   <div class="grid" style="margin-top:8px">
+    <div class="f"><label>反映先の室</label><select onchange="PR().walk[${wi}].roomId=this.value;renderProrate()">${prRoomOpts(wk.roomId)}</select></div>
+    <div class="f"><label>反映先の距離欄</label><select onchange="PR().walk[${wi}].field=this.value;renderProrate()">${Object.entries(PR_WALK_FIELD).map(([k,l])=>`<option value="${k}" ${k===wk.field?"selected":""}>${l}</option>`).join("")}</select></div>
+   </div>
+   <div style="overflow-x:auto"><table class="t"><tr><th>区間</th><th>用途区分(歩行速度表)</th><th>経路の部分</th><th>距離 l<sub>i</sub>[m]</th><th>速度 v<sub>i</sub>[m/分]</th><th>l<sub>i</sub>/v<sub>i</sub>[分]</th><th></th></tr>${rows}
+    <tr><th colspan="3">合計</th><th style="text-align:right">${fmt(c.sumL,1)}</th><th></th><th style="text-align:right">${fmt(c.sumT,3)}</th><th></th></tr></table></div>
+   <button class="small" onclick="(r=>PR().walk[${wi}].rows.push({name:'区間'+(r.length+1),cat:(r[r.length-1]||{}).cat||'office',type:'other',l:'',v:prSegV((r[r.length-1]||{}).cat||'office','other')}))(PR().walk[${wi}].rows);renderProrate()">＋区間を追加</button>
+   <div class="fx">t = Σ(l<sub>i</sub>/v<sub>i</sub>) = <b>${fmt(c.sumT,3)}</b> 分
+    ${c.room?`<br>換算歩行距離 l<sub>eq</sub> = t × v(${esc(c.room.name)}: ${c.vRoom} m/分) = ${fmt(c.sumT,3)} × ${c.vRoom} = <b>${c.lEq!=null?fmt(c.lEq,1):"—"}</b> m(0.1m単位切上げ)`:`<br><span class="small-note">反映先の室を選ぶと換算歩行距離を表示します</span>`}</div>
+   ${c.warns.map(x=>`<div class="warn small-note">⚠ ${esc(x)}</div>`).join("")}
+   <div style="margin-top:6px"><button class="small primary" onclick="prApplyWalk(${wi})">室へ反映(${PR_WALK_FIELD[wk.field]} = ${c.lEq!=null?fmt(c.lEq,1):"—"} m)</button>
+    ${c.room?`<span class="small-note"> 現在の室の値: ${c.room[wk.field]===""||c.room[wk.field]==null?"(空欄)":c.room[wk.field]} m・v=${c.room.walkV} m/分</span>`:""}${stale?`<span class="warn small-note"> ⚠ 反映後に室の距離又は歩行速度が変更されています(再反映してください)</span>`:""}</div>
+  </div>`;
+ });
+ if(!P.walk.length)w='<div class="note">歩行経路はまだありません。「＋歩行経路を追加」で作成します。</div>';
+ document.getElementById("prWalkArea").innerHTML=w;
+}
+/* ---- 計算書 付録 ---- */
+function prorateReportHTML(){
+ const P=PR(); if(!P.mix.length&&!P.walk.length) return "";
+ let h=`<h2 class="pagebreak">付録 按分計算</h2>`;
+ P.mix.forEach(mx=>{
+  const c=prMixCalc(mx);
+  const cur=c.room?(+c.room.p===c.pEq&&+c.room.ql===c.qEq):false;
+  h+=`<h3>${esc(mx.name)}(反映先: ${c.room?esc(c.room.name):"未指定"})</h3>
+  <table><tr><th>部分</th><th>用途</th><th>A<sub>i</sub>[m²]</th><th>p<sub>i</sub>[人/m²]</th><th>ql<sub>i</sub>[MJ/m²]</th><th>p<sub>i</sub>A<sub>i</sub></th><th>ql<sub>i</sub>A<sub>i</sub></th></tr>
+  ${c.rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(USES[r.useKey]?.label||"")}</td><td>${fmt(r.A)}</td><td>${isNaN(r.pv)?"—":r.pv}</td><td>${isNaN(r.qv)?"—":r.qv}</td><td>${isNaN(r.pv)?"—":fmt(r.pv*r.A,2)}</td><td>${isNaN(r.qv)?"—":fmt(r.qv*r.A,0)}</td></tr>`).join("")}
+  <tr><th colspan="2">合計</th><th>${fmt(c.sumA)}</th><th></th><th></th><th>${fmt(c.sumPA,2)}</th><th>${fmt(c.sumQA,0)}</th></tr></table>
+  <div><span class="fx">p = ${fmt(c.sumPA,2)} / ${fmt(c.sumA)} = ${c.pEq} 人/m²</span>
+  <span class="fx">ql = ${mx.qlMode==="max"?`max(ql<sub>i</sub>) = ${c.qMax}`:`${fmt(c.sumQA,0)} / ${fmt(c.sumA)} = ${c.qAvg}`} MJ/m²(${mx.qlMode==="max"?"最大値":"面積加重平均"})</span></div>
+  ${c.room&&!cur?`<div style="color:#b26a00">⚠ 室の入力値(p=${c.room.p}・ql=${c.room.ql})と按分結果が一致しません</div>`:""}
+  ${c.warns.map(x=>`<div style="color:#b26a00">⚠ ${esc(x)}</div>`).join("")}`;
+ });
+ P.walk.forEach(wk=>{
+  const c=prWalkCalc(wk);
+  const cur=c.room&&c.lEq!=null&&+c.room[wk.field]===c.lEq;
+  h+=`<h3>${esc(wk.name)}(反映先: ${c.room?esc(c.room.name)+" / "+PR_WALK_FIELD[wk.field]:"未指定"})</h3>
+  <table><tr><th>区間</th><th>用途区分</th><th>経路の部分</th><th>l<sub>i</sub>[m]</th><th>v<sub>i</sub>[m/分]</th><th>l<sub>i</sub>/v<sub>i</sub>[分]</th></tr>
+  ${c.rows.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(WALKCAT[s.cat]?.label||"")}</td><td>${PR_SEG[s.type]||""}</td><td>${fmt(s.lv,1)}</td><td>${s.vv}</td><td>${fmt(s.t,3)}</td></tr>`).join("")}
+  <tr><th colspan="3">合計</th><th>${fmt(c.sumL,1)}</th><th></th><th>${fmt(c.sumT,3)}</th></tr></table>
+  <div><span class="fx">t = Σ(l<sub>i</sub>/v<sub>i</sub>) = ${fmt(c.sumT,3)} 分</span>
+  ${c.room?`<span class="fx">l<sub>eq</sub> = ${fmt(c.sumT,3)} × ${c.vRoom} = ${c.lEq!=null?fmt(c.lEq,1):"—"} m(室の歩行速度で換算・0.1m切上げ)</span>`:""}</div>
+  ${c.room&&!cur?`<div style="color:#b26a00">⚠ 室の入力値(${c.room[wk.field]} m)と換算歩行距離が一致しません</div>`:""}`;
+ });
+ h+=`<div style="margin-top:6px;font-size:10.5px;color:#555">注: 1室内に複数用途が混在する場合の在館者密度・積載可燃物発熱量の按分方法は告示に明示されていないため、本付録の面積按分は設計者の判断による。歩行時間は告示の歩行時間式(Σ l/v)を区間ごとに適用したもの。</div>`;
+ return `<div class="rep">`+h+`</div>`;
+}
 </script>
 </body>
 </html>
