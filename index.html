@@ -124,6 +124,42 @@ tr.noEvacRow>td{background:#fbf1e3}
  #report{display:block !important;border:none}
  .card{border:none;padding:0;margin:0}
 }
+/* ---------- ⑦ 歩行距離checker(旧 hokou_kyori) ---------- */
+#pane-walk{--hk-exit:#2f6fb0;--hk-max:#c73e3a;--hk-ok:#2c7a4b;--hk-warn:#a86612;--hk-mono:"SFMono-Regular",Consolas,"Courier New",monospace}
+#pane-walk .hk-stepbar{display:flex;margin-bottom:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+#pane-walk .hk-stepbar button{flex:1;border:none;border-right:1px solid var(--line);border-radius:0;padding:9px 4px;font-size:12.5px;background:#fff;color:var(--sub)}
+#pane-walk .hk-stepbar button:last-child{border-right:none}
+#pane-walk .hk-stepbar button.active{background:var(--acc);color:#fff;font-weight:600}
+#pane-walk .hk-stepbar button.done{color:var(--hk-ok)}
+#pane-walk .hk-stepbar button.active.done{color:#fff}
+#pane-walk .hk-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+#pane-walk .hk-row+.hk-row{margin-top:10px}
+#pane-walk .hk-row label{font-size:13px;color:var(--sub)}
+#pane-walk button.hk-danger{border-color:var(--hk-max);color:var(--hk-max)}
+#pane-walk input[type=file]{font-size:13px;max-width:230px}
+#pane-walk input[type=range]{width:150px;vertical-align:middle}
+#pane-walk input[type=number]{font-family:var(--hk-mono);font-size:13px;width:90px;padding:5px 8px;border:1px solid var(--line);border-radius:6px}
+#pane-walk .hk-status{font-size:13px;padding:8px 12px;border-radius:6px;background:#eef0ee;color:var(--sub);margin-top:12px}
+#pane-walk .hk-status.ok{background:#e5f2ea;color:var(--hk-ok)}
+#pane-walk .hk-status.warn{background:#f7ecd9;color:var(--hk-warn)}
+#pane-walk .hk-status.err{background:#f7e2e0;color:var(--hk-max)}
+#pane-walk .hk-canvasBox{border:1px solid var(--line);border-radius:8px;overflow:auto;background:repeating-conic-gradient(#f2f1ec 0% 25%,#fafaf7 0% 50%) 50%/24px 24px}
+#pane-walk canvas{display:block;max-width:100%;cursor:crosshair}
+#pane-walk .hk-resultPanel{display:none;margin-top:16px}
+#pane-walk .hk-lfloorCard{background:#fdf1f0;border:2px solid var(--hk-max);border-radius:8px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+#pane-walk .hk-lfloorCard .cap{font-size:13px;color:var(--hk-max);font-weight:600}
+#pane-walk .hk-lfloorCard .val{font-family:var(--hk-mono);font-size:28px;font-weight:700;color:var(--hk-max)}
+#pane-walk .hk-lfloorCard .from{font-size:13px;color:var(--sub)}
+#pane-walk table.hk-tbl{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+#pane-walk table.hk-tbl th,#pane-walk table.hk-tbl td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+#pane-walk table.hk-tbl th{font-weight:600;color:var(--sub);font-size:12px;background:#f4f3ee}
+#pane-walk td.hk-num{font-family:var(--hk-mono);text-align:right}
+#pane-walk tr.hk-maxRow{background:#fdf1f0}
+#pane-walk tr.hk-maxRow td{color:var(--hk-max);font-weight:600}
+#pane-walk td .hk-del{border:none;background:none;color:var(--sub);cursor:pointer;font-size:14px;padding:0 6px}
+#pane-walk td .hk-del:hover{color:var(--hk-max)}
+#pane-walk .hk-note{font-size:12px;color:var(--sub);margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+#pane-walk .hk-badge{display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;background:#e9eef3;color:var(--hk-exit);font-family:var(--hk-mono)}
 </style>
 </head>
 <body>
@@ -351,6 +387,7 @@ tr.noEvacRow>td{background:#fbf1e3}
  <button data-tab="results" onclick="showTab('results')">④ 判定結果</button>
  <button data-tab="report" onclick="showTab('report')">⑤ 計算書</button>
  <button data-tab="prorate" onclick="showTab('prorate')">⑥ 按分計算</button>
+ <button data-tab="walk" onclick="showTab('walk')">⑦ 歩行距離</button>
 </nav>
 <div id="inputArea">
 <div id="pane-base">
@@ -422,6 +459,64 @@ tr.noEvacRow>td{background:#fbf1e3}
  </div>
 </div>
 </div><!-- pane-prorate -->
+<div id="pane-walk" style="display:none">
+<div class="card">
+ <h2>7. 歩行距離の測定(歩行距離checker)</h2>
+ <div class="small-note" style="margin-bottom:10px">平面図上の任意の点から最寄りの出口までの経路距離を測定し、最大値を歩行距離 l<sub>floor</sub> として表示します。</div>
+ <div class="hk-stepbar">
+  <button id="hk_step1" class="active">① 図面読込</button>
+  <button id="hk_step2">② スケール設定</button>
+  <button id="hk_step3">③ 出口設定 (最大5)</button>
+  <button id="hk_step4">④ 任意点の測定</button>
+ </div>
+ <div class="hk-row" id="hk_row1">
+  <input type="file" id="hk_fileInput" accept="image/*">
+  <label>壁検出感度</label>
+  <input type="range" id="hk_threshold" min="300" max="750" step="10" value="680">
+  <span id="hk_threshOut" style="font-family:var(--hk-mono);font-size:13px;">680</span>
+ </div>
+ <div class="hk-row" id="hk_row2" style="display:none;">
+  <span style="font-size:13px;">実距離の分かる2点を順にクリック →</span>
+  <label>実距離</label>
+  <input type="number" id="hk_realDist" step="0.1" min="0" placeholder="例: 10.0">
+  <label>m</label>
+  <button id="hk_btnApplyScale" class="primary">換算を適用</button>
+  <span id="hk_scaleInfo" style="font-size:12px;font-family:var(--hk-mono);color:var(--sub);"></span>
+ </div>
+ <div class="hk-row" id="hk_row3" style="display:none;">
+  <span style="font-size:13px;">出口の位置を図上でクリック(最大5箇所)</span>
+  <span id="hk_exitCount" class="hk-badge">0 / 5</span>
+  <button id="hk_btnClearExits">出口をクリア</button>
+ </div>
+ <div class="hk-row" id="hk_row4" style="display:none;">
+  <span style="font-size:13px;">測定したい任意の点を図上でクリック(何点でも可)</span>
+  <button id="hk_btnClearPoints">測定点をクリア</button>
+ </div>
+ <div class="hk-row">
+  <button id="hk_btnReset" class="hk-danger">歩行距離をリセット</button>
+ </div>
+ <div id="hk_status" class="hk-status">図面画像を選択してください</div>
+</div>
+
+<div class="hk-canvasBox"><canvas id="hk_canvas"></canvas></div>
+
+<div class="card hk-resultPanel" id="hk_resultPanel">
+ <div class="hk-lfloorCard">
+  <span class="cap">歩行距離 l<sub>floor</sub>(最大値)</span>
+  <span class="val" id="hk_lfloorVal">–</span>
+  <span class="from" id="hk_lfloorFrom"></span>
+ </div>
+ <table class="hk-tbl">
+  <thead><tr><th>測定点</th><th style="text-align:right;">最寄り出口までの距離</th><th>最寄り出口</th><th>ルート表示</th><th></th></tr></thead>
+  <tbody id="hk_pointList"></tbody>
+ </table>
+ <div class="hk-note">
+  ※ 図上のルートは距離の長い順に <span style="color:#c73e3a;font-weight:600;">赤(1位)</span>・<span style="color:#b8890f;font-weight:600;">黄(2位)</span>・<span style="color:#2f6fb0;font-weight:600;">青(3位)</span> で表示し、4位以下は非表示です。<br>
+  ※ 距離は画像の通行可能領域(白色部分)を通る最短経路(4方向探索)の長さです。壁の検出は明度に基づく近似です。
+  避難安全検証法等の法令上の歩行距離算定方法(重心線・居室の各部分からの測定等)とは異なるため、概略検討用としてご利用ください。
+ </div>
+</div>
+</div><!-- pane-walk -->
 </div><!-- inputArea -->
 
 <div class="card no-print" id="resultsArea" style="display:none">
@@ -1062,7 +1157,7 @@ function dropDoor(ev,i){
  DRAG_D=null;renderDoors();if(moved)renderRooms();
 }
 /* ---------- タブ ---------- */
-const PANES={base:"pane-base",doors:"pane-doors",rooms:"pane-rooms",results:"resultsArea",report:"report",prorate:"pane-prorate"};
+const PANES={base:"pane-base",doors:"pane-doors",rooms:"pane-rooms",results:"resultsArea",report:"report",prorate:"pane-prorate",walk:"pane-walk"};
 function showTab(name){
  if(name==="prorate")renderProrate();
  for(const [k,id] of Object.entries(PANES)){
@@ -1837,6 +1932,374 @@ function prorateReportHTML(){
  h+=`<div style="margin-top:6px;font-size:10.5px;color:#555">注: 1室内に複数用途が混在する場合の在館者密度・積載可燃物発熱量の按分方法は告示に明示されていないため、本付録の面積按分は設計者の判断による。歩行時間は告示の歩行時間式(Σ l/v)を区間ごとに適用したもの。</div>`;
  return `<div class="rep">`+h+`</div>`;
 }
+</script>
+<script>
+/* ---------- ⑦ 歩行距離checker ---------- */
+(function(){
+  const canvas = document.getElementById('hk_canvas');
+  const ctx = canvas.getContext('2d', {willReadFrequently:true});
+  const fileInput = document.getElementById('hk_fileInput');
+  const threshold = document.getElementById('hk_threshold');
+  const threshOut = document.getElementById('hk_threshOut');
+  const statusEl = document.getElementById('hk_status');
+  const realDistInput = document.getElementById('hk_realDist');
+  const scaleInfo = document.getElementById('hk_scaleInfo');
+  const exitCountEl = document.getElementById('hk_exitCount');
+  const resultPanel = document.getElementById('hk_resultPanel');
+  const pointListEl = document.getElementById('hk_pointList');
+
+  const stepBtns = [1,2,3,4].map(i=>document.getElementById('hk_step'+i));
+  const rows = [1,2,3,4].map(i=>document.getElementById('hk_row'+i));
+
+  let img=null, W=0, H=0;
+  let step=1;
+  let scaleP1=null, scaleP2=null, pxPerMeter=null;
+  let exits=[];        // [{x,y}]
+  let points=[];       // [{x,y}]
+  let distMap=null;    // multi-source BFS: 最寄り出口までの距離
+  let originMap=null;  // どの出口が最寄りか(出口index)
+  let obsCache=null, obsThresh=null;
+
+  function setStatus(msg,cls){ statusEl.textContent=msg; statusEl.className='hk-status'+(cls?' '+cls:''); }
+
+  function setStep(s){
+    step=s;
+    stepBtns.forEach((b,i)=>{
+      b.classList.toggle('active', i+1===s);
+    });
+    rows.forEach((r,i)=>{ r.style.display = (i+1===s)?'flex':'none'; });
+    const msgs={
+      1:'図面画像を選択してください',
+      2:'スケール設定: 実距離の分かる2点(通り芯間など)を順にクリックし、実距離を入力して「換算を適用」',
+      3:'出口の位置を図上でクリックしてください(最大5箇所)',
+      4:'測定したい任意の点を図上でクリックしてください'
+    };
+    setStatus(msgs[s]);
+  }
+
+  stepBtns.forEach((b,i)=>{
+    b.addEventListener('click', ()=>{
+      if(i+1>1 && !img){ setStatus('先に図面を読み込んでください','err'); return; }
+      if(i+1===4 && exits.length===0){ setStatus('先に出口を1箇所以上設定してください','err'); return; }
+      setStep(i+1);
+    });
+  });
+
+  threshold.addEventListener('input', ()=>{
+    threshOut.textContent=threshold.value;
+    obsCache=null; distMap=null; originMap=null;
+  });
+
+  fileInput.addEventListener('change', e=>{
+    const file=e.target.files[0];
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const image=new Image();
+      image.onload=()=>{
+        const maxDim=900;
+        const s=Math.min(1,maxDim/Math.max(image.width,image.height));
+        W=Math.round(image.width*s);
+        H=Math.round(image.height*s);
+        canvas.width=W; canvas.height=H;
+        img=image;
+        resetAll(false);
+        redraw();
+        stepBtns[0].classList.add('done');
+        setStep(2);
+        setStatus('画像を読み込みました。次にスケールを設定してください(省略時はpx表示)','ok');
+      };
+      image.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function resetAll(clearImg){
+    scaleP1=scaleP2=null; pxPerMeter=null;
+    exits=[]; points=[];
+    distMap=null; originMap=null; obsCache=null;
+    scaleInfo.textContent='';
+    exitCountEl.textContent='0 / 5';
+    resultPanel.style.display='none';
+    pointListEl.innerHTML='';
+    stepBtns.forEach(b=>b.classList.remove('done'));
+    if(clearImg){ img=null; ctx.clearRect(0,0,W,H); }
+  }
+
+  document.getElementById('hk_btnReset').addEventListener('click', ()=>{
+    resetAll(false);
+    if(img){ redraw(); stepBtns[0].classList.add('done'); }
+    setStep(img?2:1);
+    setStatus('リセットしました');
+  });
+
+  document.getElementById('hk_btnClearExits').addEventListener('click', ()=>{
+    exits=[]; points=[]; distMap=null; originMap=null;
+    exitCountEl.textContent='0 / 5';
+    resultPanel.style.display='none'; pointListEl.innerHTML='';
+    redraw();
+    setStatus('出口と測定点をクリアしました');
+  });
+
+  document.getElementById('hk_btnClearPoints').addEventListener('click', ()=>{
+    points=[];
+    resultPanel.style.display='none'; pointListEl.innerHTML='';
+    redraw();
+    setStatus('測定点をクリアしました');
+  });
+
+  document.getElementById('hk_btnApplyScale').addEventListener('click', ()=>{
+    if(!scaleP1||!scaleP2){ setStatus('先に図上で2点をクリックしてください','err'); return; }
+    const px=Math.hypot(scaleP2[0]-scaleP1[0], scaleP2[1]-scaleP1[1]);
+    const rm=parseFloat(realDistInput.value);
+    if(!(rm>0)){ setStatus('実距離をm単位で入力してください','err'); return; }
+    pxPerMeter=px/rm;
+    scaleInfo.textContent=px.toFixed(1)+'px = '+rm+'m ('+pxPerMeter.toFixed(2)+' px/m)';
+    stepBtns[1].classList.add('done');
+    refreshList();
+    setStep(3);
+    setStatus('スケール設定完了。次に出口を設定してください','ok');
+  });
+
+  function getObstacle(){
+    const t=parseInt(threshold.value,10);
+    if(obsCache && obsThresh===t) return obsCache;
+    const off=document.createElement('canvas');
+    off.width=W; off.height=H;
+    const octx=off.getContext('2d');
+    octx.drawImage(img,0,0,W,H);
+    const d=octx.getImageData(0,0,W,H).data;
+    const obs=new Uint8Array(W*H);
+    for(let i=0;i<W*H;i++){
+      obs[i]=(d[i*4]+d[i*4+1]+d[i*4+2]<t)?1:0;
+    }
+    obsCache=obs; obsThresh=t;
+    return obs;
+  }
+
+  function snapToFree(x,y,obs){
+    if(!obs[y*W+x]) return [x,y,false];
+    for(let r=1;r<=40;r++){
+      for(let dx=-r;dx<=r;dx++){
+        for(let dy=-r;dy<=r;dy++){
+          if(Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;
+          const nx=x+dx, ny=y+dy;
+          if(nx>=0&&nx<W&&ny>=0&&ny<H&&!obs[ny*W+nx]) return [nx,ny,true];
+        }
+      }
+    }
+    return [x,y,false];
+  }
+
+  function buildDistMap(){
+    // 全出口を種点とする多始点BFS
+    const obs=getObstacle();
+    const dist=new Int32Array(W*H).fill(-1);
+    const org=new Int8Array(W*H).fill(-1);
+    const qx=new Int32Array(W*H), qy=new Int32Array(W*H);
+    let head=0, tail=0;
+    exits.forEach((ex,idx)=>{
+      const i=ex.y*W+ex.x;
+      if(!obs[i] && dist[i]<0){
+        dist[i]=0; org[i]=idx;
+        qx[tail]=ex.x; qy[tail]=ex.y; tail++;
+      }
+    });
+    while(head<tail){
+      const x=qx[head], y=qy[head]; head++;
+      const d=dist[y*W+x], o=org[y*W+x];
+      if(x+1<W){const i=y*W+x+1; if(dist[i]<0&&!obs[i]){dist[i]=d+1;org[i]=o;qx[tail]=x+1;qy[tail]=y;tail++;}}
+      if(x-1>=0){const i=y*W+x-1; if(dist[i]<0&&!obs[i]){dist[i]=d+1;org[i]=o;qx[tail]=x-1;qy[tail]=y;tail++;}}
+      if(y+1<H){const i=(y+1)*W+x; if(dist[i]<0&&!obs[i]){dist[i]=d+1;org[i]=o;qx[tail]=x;qy[tail]=y+1;tail++;}}
+      if(y-1>=0){const i=(y-1)*W+x; if(dist[i]<0&&!obs[i]){dist[i]=d+1;org[i]=o;qx[tail]=x;qy[tail]=y-1;tail++;}}
+    }
+    distMap=dist; originMap=org;
+  }
+
+  canvas.addEventListener('click', e=>{
+    if(!img) return;
+    const rect=canvas.getBoundingClientRect();
+    let x=Math.round((e.clientX-rect.left)*canvas.width/rect.width);
+    let y=Math.round((e.clientY-rect.top)*canvas.height/rect.height);
+    x=Math.max(0,Math.min(W-1,x));
+    y=Math.max(0,Math.min(H-1,y));
+
+    if(step===2){
+      if(!scaleP1){ scaleP1=[x,y]; setStatus('1点目を設定。2点目をクリックしてください'); }
+      else if(!scaleP2){ scaleP2=[x,y]; setStatus('2点目を設定。実距離を入力して「換算を適用」を押してください'); }
+      else { scaleP1=[x,y]; scaleP2=null; setStatus('1点目を再設定。2点目をクリックしてください'); }
+      redraw(); return;
+    }
+
+    if(step===3){
+      if(exits.length>=5){ setStatus('出口は最大5箇所までです。クリアして再設定してください','warn'); return; }
+      const obs=getObstacle();
+      const s=snapToFree(x,y,obs);
+      exits.push({x:s[0],y:s[1]});
+      distMap=null; originMap=null;
+      points=[]; resultPanel.style.display='none'; pointListEl.innerHTML='';
+      exitCountEl.textContent=exits.length+' / 5';
+      stepBtns[2].classList.add('done');
+      setStatus((s[2]?'(壁上のため通路側へ補正) ':'')+'出口'+exits.length+'を設定しました'+(exits.length<5?'。続けて追加するか、④へ進んでください':''),'ok');
+      redraw(); return;
+    }
+
+    if(step===4){
+      if(exits.length===0){ setStatus('先に出口を設定してください','err'); return; }
+      const obs=getObstacle();
+      const s=snapToFree(x,y,obs);
+      if(!distMap) buildDistMap();
+      const i=s[1]*W+s[0];
+      if(distMap[i]<0){
+        setStatus('この点はどの出口とも繋がっていません(壁で隔離)。感度を下げるか別の点を選んでください','err');
+        return;
+      }
+      points.push({x:s[0],y:s[1]});
+      refreshList();
+      redraw();
+      return;
+    }
+  });
+
+  function fmt(px){
+    return pxPerMeter ? (px/pxPerMeter).toFixed(1)+' m' : px.toLocaleString()+' px';
+  }
+
+  function refreshList(){
+    if(points.length===0){ resultPanel.style.display='none'; return; }
+    if(!distMap) buildDistMap();
+    const data=points.map((p,idx)=>{
+      const i=p.y*W+p.x;
+      return {idx,d:distMap[i],ex:originMap[i]};
+    });
+    const sorted=data.slice().sort((a,b)=>b.d-a.d);
+    const maxIdx=sorted.length?sorted[0].idx:-1;
+    const maxD=sorted.length?sorted[0].d:-1;
+    const rankColors=['#c73e3a','#d6a41a','#2f6fb0'];
+    const rankNames=['1位','2位','3位'];
+    pointListEl.innerHTML='';
+    sorted.forEach((row,rank)=>{
+      const tr=document.createElement('tr');
+      if(rank===0) tr.className='hk-maxRow';
+      const chip=(rank<3)
+        ? '<span style="display:inline-block;width:22px;height:4px;border-radius:2px;vertical-align:middle;margin-right:6px;background:'+rankColors[rank]+';"></span>'+rankNames[rank]
+        : '<span style="color:#8a8a80;">–</span>';
+      tr.innerHTML=
+        '<td>P'+(row.idx+1)+(rank===0?' ★':'')+'</td>'+
+        '<td class="hk-num">'+fmt(row.d)+'</td>'+
+        '<td>出口'+(row.ex+1)+'</td>'+
+        '<td>'+chip+'</td>'+
+        '<td><button class="hk-del" data-i="'+row.idx+'" title="削除">✕</button></td>';
+      pointListEl.appendChild(tr);
+    });
+    pointListEl.querySelectorAll('.hk-del').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        points.splice(parseInt(btn.dataset.i,10),1);
+        refreshList(); redraw();
+      });
+    });
+    document.getElementById('hk_lfloorVal').textContent=fmt(maxD);
+    document.getElementById('hk_lfloorFrom').textContent=
+      '(P'+(maxIdx+1)+' → 出口'+(data[maxIdx].ex+1)+')';
+    resultPanel.style.display='block';
+    stepBtns[3].classList.add('done');
+    setStatus('測定点 '+points.length+'点。最大は P'+(maxIdx+1)+' の '+fmt(maxD),'ok');
+  }
+
+  function tracePath(fromX,fromY){
+    if(!distMap) return null;
+    const path=[[fromX,fromY]];
+    let x=fromX, y=fromY;
+    let d=distMap[y*W+x];
+    if(d<0) return null;
+    let guard=W*H;
+    while(d>0&&guard-->0){
+      let moved=false;
+      const cand=[[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
+      for(const [nx,ny] of cand){
+        if(nx>=0&&nx<W&&ny>=0&&ny<H&&distMap[ny*W+nx]===d-1){
+          x=nx;y=ny;d--;path.push([x,y]);moved=true;break;
+        }
+      }
+      if(!moved)break;
+    }
+    return path;
+  }
+
+  function drawPath(path,color,width){
+    if(!path||path.length<2)return;
+    ctx.beginPath();
+    ctx.moveTo(path[0][0],path[0][1]);
+    for(let i=1;i<path.length;i+=3) ctx.lineTo(path[i][0],path[i][1]);
+    ctx.lineTo(path[path.length-1][0],path[path.length-1][1]);
+    ctx.strokeStyle=color;
+    ctx.lineWidth=width||2;
+    ctx.setLineDash([6,4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawMarker(x,y,color,label,rad){
+    const r=rad||8;
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.strokeStyle=color; ctx.lineWidth=3; ctx.stroke();
+    ctx.fillStyle=color;
+    ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+    ctx.font='bold 14px sans-serif';
+    ctx.lineWidth=4; ctx.strokeStyle='#ffffff';
+    ctx.strokeText(label,x+r+4,y-r-2);
+    ctx.fillText(label,x+r+4,y-r-2);
+  }
+
+  function redraw(){
+    if(!img)return;
+    ctx.clearRect(0,0,W,H);
+    ctx.drawImage(img,0,0,W,H);
+
+    // 上位3ルートを描画: 1位=赤, 2位=黄, 3位=青(4位以降は非表示)
+    if(points.length>0 && distMap){
+      const ranked=points.map((p,idx)=>({idx,d:distMap[p.y*W+p.x]}))
+        .filter(r=>r.d>=0)
+        .sort((a,b)=>b.d-a.d);
+      const routeColors=['rgba(199,62,58,0.8)','rgba(214,164,26,0.85)','rgba(47,111,176,0.8)'];
+      const routeWidths=[3,2.5,2.5];
+      // 重なり時に1位が最前面に来るよう、3位→1位の順で描画
+      for(let rank=Math.min(3,ranked.length)-1; rank>=0; rank--){
+        const p=points[ranked[rank].idx];
+        const path=tracePath(p.x,p.y);
+        drawPath(path,routeColors[rank],routeWidths[rank]);
+      }
+    }
+
+    if(scaleP1) drawMarker(scaleP1[0],scaleP1[1],'#7a7a72','S1',6);
+    if(scaleP2){
+      drawMarker(scaleP2[0],scaleP2[1],'#7a7a72','S2',6);
+      ctx.beginPath();
+      ctx.moveTo(scaleP1[0],scaleP1[1]);
+      ctx.lineTo(scaleP2[0],scaleP2[1]);
+      ctx.strokeStyle='#7a7a72';ctx.lineWidth=1.5;
+      ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);
+    }
+
+    exits.forEach((ex,i)=>drawMarker(ex.x,ex.y,'#2f6fb0','出口'+(i+1)));
+
+    const rankOf={};
+    if(distMap){
+      points.map((p,idx)=>({idx,d:distMap[p.y*W+p.x]}))
+        .filter(r=>r.d>=0)
+        .sort((a,b)=>b.d-a.d)
+        .forEach((r,rank)=>{ rankOf[r.idx]=rank; });
+    }
+    const markColors=['#c73e3a','#d6a41a','#2f6fb0'];
+    points.forEach((p,i)=>{
+      const rank=rankOf[i];
+      const color=(rank!==undefined&&rank<3)?markColors[rank]:'#8a8a80';
+      const star=(rank===0)?' ★':'';
+      drawMarker(p.x,p.y,color,'P'+(i+1)+star,(rank===0)?10:7);
+    });
+  }
+})();
 </script>
 </body>
 </html>
