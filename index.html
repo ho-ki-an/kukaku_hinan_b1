@@ -683,6 +683,12 @@ const DOOR = {
  d1:{label:"令112条19項1号(熱感連動等 防火設備)",       short:"熱感1号", joji:false, cls:"c1", hidden:true}, /* 選択肢から非表示(既存データ互換のため定義は残す) */
  none:{label:"防火設備なし・その他",                    short:"その他",  joji:false, cls:"other"}
 };
+/* 1号・2号防火設備は「準耐火構造の壁又は不燃材料で覆われた壁」に取り付けるものとして扱う(令2国交告509号 火災室以外の室の煙等発生量 0.2Aop・2Aopの適用条件)。
+   壁の条件を満たさない場合は建具を「防火設備なし・その他」とする(煙等発生量はその他の場合・Hlimは開口上端で安全側) */
+const WALL_NOTE="準耐火構造の壁又は不燃材料で覆われた壁に取り付け";
+function wallNoteHTML(){
+ return `<div style="margin-top:3px;font-size:11px;color:var(--sub,#556)" title="0.2Aop・2Aopは準耐火構造の壁又は不燃材料で覆われた壁の開口部に限ります。壁がこの条件を満たさない場合は「防火設備なし・その他」を選択してください">※${WALL_NOTE}</div>`;
+}
 /* =========================================================
    計算エンジン(純関数群) ENGINE_START
    ========================================================= */
@@ -1205,7 +1211,7 @@ function renderDoors(){
    <td><input type="text" inputmode="decimal" autocomplete="off" data-num step="0.05" value="${d.topH}" oninput="M.doors[${i}].topH=num(this.value)"></td>
    <td><input type="text" inputmode="decimal" autocomplete="off" data-num step="0.05" value="${d.botH??""}" placeholder="0" title="窓・欄間等の開口部の床面からの下端高さ。扉は空欄(0)" oninput="M.doors[${i}].botH=this.value"></td>
    <td style="text-align:center"><input type="checkbox" ${d.noEvac?"checked":""} title="防火シャッター等、開口部としては存在するが避難時に通行できない建具" onchange="M.doors[${i}].noEvac=this.checked;renderDoors();renderRooms()"></td>
-   <td><select onchange="M.doors[${i}].cls=this.value">${Object.entries(DOOR).filter(([k,x])=>!x.hidden||d.cls===k).map(([k,x])=>`<option value="${k}" ${d.cls===k?"selected":""}>${x.label}</option>`).join("")}</select></td>
+   <td><select onchange="M.doors[${i}].cls=this.value;renderDoors()">${Object.entries(DOOR).filter(([k,x])=>!x.hidden||d.cls===k).map(([k,x])=>`<option value="${k}" ${d.cls===k?"selected":""}>${x.label}</option>`).join("")}</select>${(DOOR[d.cls]||DOOR.none).cls!=="other"?wallNoteHTML():""}</td>
    <td class="small-note">${doorUsedRooms(d).join("、")||"未使用"}</td>
    <td><button class="small danger" onclick="delDoor(${i})">削除</button></td></tr>`;
  });
@@ -1655,12 +1661,14 @@ function buildReport(){
  /* 出口・開口部一覧 */
  const destName=e=>e.to.type==="ground"?"地上":e.to.type==="stair"?"区画外("+(((model.stairs||[]).find(s=>s.id===e.to.ref)||{}).name||"直通階段")+")":(roomById(model,e.to.ref)?.name||"?");
  h+=`<h2>2. 出口・開口部一覧</h2>`;
+ if((model.doors||[]).some(d=>(DOOR[d.cls]||DOOR.none).cls!=="other"))
+  h+=`<div style="font-size:11px;margin:4px 0 6px;padding:4px 8px;border:1px solid #999">※令112条19項第1号・第2号の防火設備は、すべて準耐火構造の壁又は不燃材料で覆われた壁に取り付けるものとして算定(令2国交告509号 第四号 表 火災室以外の室の煙等発生量: 0.2Aop・2Aop)。</div>`;
  h+=`<div style="font-size:11px;margin:2px 0 4px">(1) 出口・開口部(建具リスト)</div>
  <table><tr><th>名称</th><th>有効幅B[m]</th><th>開口見付幅[m]<br>(Aop用)</th><th>上端高さ[m]</th><th>下端高さ[m]</th><th>防火設備(令112条19項)</th><th>避難時の使用</th><th>使用箇所(室→接続先)</th></tr>`;
  (model.doors||[]).forEach(d=>{
   const use=[];
   model.rooms.forEach(r=>(r.exits||[]).forEach(e=>{ if(e.doorType===d.id) use.push(esc(r.name)+" → "+esc(destName(e))); }));
-  h+=`<tr><td>${esc(d.name)}</td><td>${fmt(+d.width)}</td><td>${fmt(+d.rawW||+d.width)}</td><td>${fmt(+d.topH||2.0)}</td><td>${fmt(+d.botH||0)}</td><td>${(DOOR[d.cls]||DOOR.none).label}</td><td${d.noEvac?' class="j-ng"':""}>${d.noEvac?"不使用(避難算定から除外)":"使用"}</td><td>${use.join("、")||"未使用"}</td></tr>`;
+  h+=`<tr><td>${esc(d.name)}</td><td>${fmt(+d.width)}</td><td>${fmt(+d.rawW||+d.width)}</td><td>${fmt(+d.topH||2.0)}</td><td>${fmt(+d.botH||0)}</td><td>${(DOOR[d.cls]||DOOR.none).label}${(DOOR[d.cls]||DOOR.none).cls!=="other"?`<br><span style="font-size:10px">※${WALL_NOTE}</span>`:""}</td><td${d.noEvac?' class="j-ng"':""}>${d.noEvac?"不使用(避難算定から除外)":"使用"}</td><td>${use.join("、")||"未使用"}</td></tr>`;
  });
  h+=`</table>`;
  const noDoor=[];
@@ -2730,7 +2738,7 @@ function pcInspRender(){
    ${fld("door",id,["width","有効幅B [m]",0.05,1],d)}${fld("door",id,["rawW","開口見付幅 [m](空欄=B)",0.05,0],d)}
    ${fld("door",id,["topH","上端高さ [m]",0.05,1],d)}${fld("door",id,["botH","下端高さ [m](窓・欄間/空欄=0)",0.05,0],d)}
    <div class="w2"><label><input type="checkbox" ${d.noEvac?"checked":""} onchange="pcSetF('door','${id}','noEvac',this.checked,0,1)"> 避難時不使用(防火シャッター等)</label></div>
-   <div class="w2"><label>防火設備(令112条19項)</label><select onchange="pcSetF('door','${id}','cls',this.value,0)">${opt(Object.entries(DOOR).filter(([k,x])=>!x.hidden||d.cls===k).map(([k,x])=>[k,x.label]),d.cls)}</select></div>
+   <div class="w2"><label>防火設備(令112条19項)</label><select onchange="pcSetF('door','${id}','cls',this.value,0,1)">${opt(Object.entries(DOOR).filter(([k,x])=>!x.hidden||d.cls===k).map(([k,x])=>[k,x.label]),d.cls)}</select>${(DOOR[d.cls]||DOOR.none).cls!=="other"?wallNoteHTML():""}</div>
   </div>
   <div class="small-note">${nUse>1?`⚠ この建具は ${nUse} か所の出口で使っています。ここでの変更は全部に反映されます。`:""} 使用箇所: ${used.map((n,j)=>esc(n)).join("、")||"未使用"}</div>
   <div style="margin-top:6px"><button type="button" class="small" onclick="pcSelect({t:'room',k:'${r.id}'})">← ${esc(r.name)} の入力へ</button> <button type="button" class="small" onclick="showTab('doors')">②建具リストで見る</button></div>`;
