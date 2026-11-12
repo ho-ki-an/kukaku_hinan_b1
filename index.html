@@ -3431,8 +3431,9 @@ function ponchiBind(){
   const now=Date.now(); if(now-(box._zt||0)<120) return; box._zt=now; pcZoomStep(ev.deltaY<0?1:-1,ev.clientX,ev.clientY); };
  pcZoomLbl();
  box.onpointerdown=ev=>{
+  if(ev.target===box&&(ev.offsetX>=box.clientWidth||ev.offsetY>=box.clientHeight)){ PONCHI_DRAG=null; return; } // スクロールバーの操作は図の操作にしない
   if(PONCHI_EDIT&&PC_UL&&PC_ULMODE&&PC_ULMODE.t==="move"){ const c=pcUlCal(); PONCHI_DRAG={ulMove:true,sx:ev.clientX,sy:ev.clientY,ox:c.x,oy:c.y,moved:false}; box.setPointerCapture(ev.pointerId); ev.preventDefault(); return; } // 下敷きの移動
-  if(PONCHI_EDIT&&(PC_MEAS||(PC_UL&&PC_ULMODE&&PC_ULMODE.t==="cal"))){ PONCHI_DRAG={pick:true,sx:ev.clientX,sy:ev.clientY,moved:false}; return; } // 歩行距離・縮尺合わせの点
+  if(PONCHI_EDIT&&(PC_MEAS||(PC_UL&&PC_ULMODE&&PC_ULMODE.t==="cal"))){ PONCHI_DRAG={pick:true,sx:ev.clientX,sy:ev.clientY,moved:false,sl:box.scrollLeft,st:box.scrollTop}; box.setPointerCapture(ev.pointerId); return; } // 歩行距離・縮尺合わせの点
   if(PC_ANNEX&&PONCHI_EDIT){ const g=ev.target.closest("[data-pk]"); PONCHI_DRAG={annexPick:g?g.dataset.pk:""}; return; } // 付属する居室を図で選ぶ
   if(PC_BARDRAW&&PONCHI_EDIT){ // 棒の廊下の描画: 押した点から棒を引く
    const pt=pcPoint(ev); if(!pt) return;
@@ -3480,6 +3481,8 @@ function ponchiBind(){
    const c=pcUlCal(), s=PONCHI_VIEW.s; c.x=+(d.ox+(ev.clientX-d.sx)/s).toFixed(3); c.y=+(d.oy+(ev.clientY-d.sy)/s).toFixed(3); ponchiDraw(true); return; }
   if(d.door&&d.info){ if(!d.moved&&Math.hypot(ev.clientX-d.sx,ev.clientY-d.sy)<3) return; if(!d.moved){ pcPush(); pcMenuClose(); } d.moved=true;
    const pt=pcPoint(ev); if(pt){ pcDoorDragTo(d.info,pt); ponchiDraw(true); } return; }
+  if(d.pick){ if(!d.moved&&Math.hypot(ev.clientX-d.sx,ev.clientY-d.sy)<4) return; d.moved=true; // 点の指定中もドラッグは図の移動(点にはしない)
+   box.scrollLeft=d.sl-(ev.clientX-d.sx); box.scrollTop=d.st-(ev.clientY-d.sy); return; }
   if(d.blank&&PC_ZOOM>1){ if(!d.moved&&Math.hypot(ev.clientX-d.sx,ev.clientY-d.sy)<4) return; d.moved=true; // 拡大中: 空白部分のドラッグで図を移動
    box.scrollLeft=d.sl-(ev.clientX-d.sx); box.scrollTop=d.st-(ev.clientY-d.sy); return; }
   if(!d.key) return;
@@ -3518,8 +3521,8 @@ function ponchiBind(){
  box.onpointerup=box.onpointercancel=ev=>{
   const d=PONCHI_DRAG; PONCHI_DRAG=null; if(!d) return;
   if(d.ulMove) return;
-  if(d.pick){ if(ev.type!=="pointerup") return; const pt=pcPoint(ev); if(!pt) return;
-   const m=PC_ULMODE; if(m&&m.t==="cal"){ if(!m.a||m.b){ m.a=pt; m.b=null; } else m.b=pt; ponchiDraw(true); const f=m.b&&document.getElementById("pcUlReal"); if(f) f.focus(); }
+  if(d.pick){ if(ev.type!=="pointerup"||d.moved) return; const pt=pcPoint(ev); if(!pt) return;
+   const m=PC_ULMODE; if(m&&m.t==="cal"){ const U=pcUlRect(); if(U&&(pt.x<U.x||pt.x>U.x+U.w||pt.y<U.y||pt.y>U.y+U.h)) return; /* 縮尺合わせの点は下敷きの範囲内だけ */ if(!m.a||m.b){ m.a=pt; m.b=null; } else m.b=pt; ponchiDraw(true); const f=m.b&&document.getElementById("pcUlReal"); if(f) f.focus(); }
    else pcMeasClick(pt);
    return; }
   if(d.annexPick!=null){ if(ev.type==="pointerup"&&d.annexPick&&!d.annexPick.startsWith("s:")) pcAnnexToggle(d.annexPick); return; }
