@@ -237,6 +237,11 @@ tr.noEvacRow>td{background:#fbf1e3}
 #pane-check .tsMark.over{border-left-style:dashed}
 #pane-check .tsMark.over span{left:auto;right:4px}
 #pane-check .chkMatrixBox{overflow:auto}
+/* macはスクロールバーを隠す設定が既定のため、横長の図・表ではバーを常に表示する */
+.chkGraphBox::-webkit-scrollbar,.chkMatrixBox::-webkit-scrollbar,.hk-canvasBox::-webkit-scrollbar{height:12px;width:12px;-webkit-appearance:none}
+.chkGraphBox::-webkit-scrollbar-thumb,.chkMatrixBox::-webkit-scrollbar-thumb,.hk-canvasBox::-webkit-scrollbar-thumb{background:#b8bcc4;border-radius:6px;border:2px solid #f1f2f4}
+.chkGraphBox::-webkit-scrollbar-thumb:hover,.chkMatrixBox::-webkit-scrollbar-thumb:hover,.hk-canvasBox::-webkit-scrollbar-thumb:hover{background:#8f949c}
+.chkGraphBox::-webkit-scrollbar-track,.chkMatrixBox::-webkit-scrollbar-track,.hk-canvasBox::-webkit-scrollbar-track{background:#f1f2f4;border-radius:6px}
 #pane-check .chkMatrix td.num{text-align:right;white-space:nowrap}
 #pane-check .chkMatrix td.clk{cursor:pointer}
 #pane-check .chkMatrix td.clk:hover{outline:2px solid var(--acc);outline-offset:-2px}
