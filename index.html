@@ -237,6 +237,7 @@ tr.noEvacRow>td{background:#fbf1e3}
 #pane-check .tsMark.over{border-left-style:dashed}
 #pane-check .tsMark.over span{left:auto;right:4px}
 #pane-check .chkMatrixBox{overflow:auto}
+.pcDistLbl:hover{text-decoration:underline}
 /* macはスクロールバーを隠す設定が既定のため、横長の図・表ではバーを常に表示する */
 .chkGraphBox::-webkit-scrollbar,.chkMatrixBox::-webkit-scrollbar,.hk-canvasBox::-webkit-scrollbar{height:12px;width:12px;-webkit-appearance:none}
 .chkGraphBox::-webkit-scrollbar-thumb,.chkMatrixBox::-webkit-scrollbar-thumb,.hk-canvasBox::-webkit-scrollbar-thumb{background:#b8bcc4;border-radius:6px;border:2px solid #f1f2f4}
@@ -3342,6 +3343,7 @@ function pcMeasTip(){
  const btn=(f,lbl)=>`<button type="button" onclick="pcMeasSet('${f}')" title="${escA(ro?ro.name:"")} の${lbl}に ${fmt(v,2)}m を入れます(今の値: ${escA(String(ro&&ro[f]!==""&&ro[f]!=null?ro[f]+"m":"未入力"))})">③「${lbl}」に入れる</button>`;
  return `<div class="pcModeTip">📐 歩行距離 <b style="font-size:15px;color:#e8590c">${fmt(r.len,2)} m</b><span class="small-note">(${pcDistRect()?"水平・垂直":"直線"})</span> 経路: ${esc(route.join(" → "))}${ro?`<br>${esc(ro.name)} の ${btn("lRoomExit","居室出口までの歩行距離")} ${btn("lStair","直通階段出口までの歩行距離")}`:""} <span class="small-note">クリックで次の始点から測り直し。</span> ${end}</div>`;
 }
+function pcDistSet(id,f,v){ pcSelect({t:"room",k:id}); pcSetF("room",id,f,String(v),true,true); } // 歩行距離の表示の数値クリック → ③の入力へ
 function pcMeasSet(f){ const m=PC_MEAS, r=m&&m.res; if(!r||!r.pts||!m.a) return; pcSetF("room",m.a.reg,f,String(Math.ceil(r.len*100-1e-9)/100),true,true); }
 const PC_WALL=1.0; // 歩行距離の始点は壁から1m内側(室の幅が2m未満の向きは中央)
 function pcRoomDist(k,F){ // 居室内のいちばん遠い点から、最寄りの居室出口(F=pcExitField()があれば直通階段・地上の出口)までの歩行距離
@@ -3405,7 +3407,9 @@ function pcDistSVG(X,Y){ // 歩行距離の表示: 居室ごとに、いちば�
    const tip=`${r.name||"(無名)"}: 室内でいちばん遠い点(壁から1m)から${K.nm}まで ${fmt(v,2)}m(${mode})`+(inp!=null?` / ③の入力 ${fmt(inp,2)}m`+(short?"(入力値が短い)":""):" / ③は未入力");
    h+=`<g pointer-events="none"><title>${esc(tip)}</title><path d="${d}" fill="none" stroke="#fff" stroke-width="5" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="${K.col}" stroke-width="2" stroke-dasharray="${K.dash}" stroke-linejoin="round"/>${pcArrowEnd(P,X,Y,K.col)}`
     +`<circle cx="${X(A.x)}" cy="${Y(A.y)}" r="4" fill="${K.col}" stroke="#fff" stroke-width="1.5"/>`
-    +`<text x="${tx}" y="${ty}" text-anchor="${anc}" font-size="12" font-weight="700" fill="${K.col}" paint-order="stroke" stroke="#fff" stroke-width="4">${K.row?"階":"室"} ${fmt(v,2)}m${inp!=null?`<tspan font-weight="400" fill="${short?"#c92a2a":"#56636f"}"> (③${fmt(inp,2)}${short?" ⚠":""})</tspan>`:""}</text></g>`; }); });
+    +`</g>`;
+   const can=PONCHI_EDIT&&(inp==null||Math.abs(inp-v)>1e-9), lab=K.f==="lRoomExit"?"居室出口までの歩行距離":"直通階段出口までの歩行距離";
+   h+=`<text class="${can?"pcDistLbl":""}" x="${tx}" y="${ty}" text-anchor="${anc}" font-size="12" font-weight="700" fill="${K.col}" paint-order="stroke" stroke="#fff" stroke-width="4" ${can?`style="cursor:pointer" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();pcDistSet('${r.id}','${K.f}',${v})"`:`pointer-events="none"`}><title>${esc(tip+(can?`\nクリックで③「${lab}」に ${fmt(v,2)}m を入れます`:""))}</title>${K.row?"階":"室"} ${fmt(v,2)}m${inp!=null?`<tspan font-weight="400" fill="${short?"#c92a2a":"#56636f"}"> (③${fmt(inp,2)}${short?" ⚠":""})</tspan>`:""}${can?`<tspan font-weight="400" font-size="10"> ✎</tspan>`:""}</text>`; }); });
  return h;
 }
 function ponchiBind(){
