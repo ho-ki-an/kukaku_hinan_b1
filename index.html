@@ -3269,8 +3269,8 @@ function pcInner(G){ // 経路を通す範囲: 壁から1m内側(狭い向きは
  const rects=[{x:x1+mx,y:y1+my,w:x2-x1-2*mx,h:y2-y1-2*my}], holes=[];
  if(G.rects.length>1){ const r=v=>Math.round(v*1e6)/1e6, U={rects:G.rects,holes:[]};
   const xs=[...new Set(G.rects.flatMap(R=>[r(R.x),r(R.x+R.w)]))].sort((a,b)=>a-b), ys=[...new Set(G.rects.flatMap(R=>[r(R.y),r(R.y+R.h)]))].sort((a,b)=>a-b);
-  for(let i=0;i+1<xs.length;i++) for(let j=0;j+1<ys.length;j++) if(!pcInReg({x:(xs[i]+xs[i+1])/2,y:(ys[j]+ys[j+1])/2},U)) holes.push({x:xs[i]-mx,y:ys[j]-my,w:xs[i+1]-xs[i]+2*mx,h:ys[j+1]-ys[j]+2*my}); }
- G.holes.forEach(H=>holes.push({x:H.x-PC_WALL,y:H.y-PC_WALL,w:H.w+2*PC_WALL,h:H.h+2*PC_WALL}));
+  for(let i=0;i+1<xs.length;i++) for(let j=0;j+1<ys.length;j++) if(!pcInReg({x:(xs[i]+xs[i+1])/2,y:(ys[j]+ys[j+1])/2},U)) holes.push({x:xs[i]-mx+1e-4,y:ys[j]-my+1e-4,w:xs[i+1]-xs[i]+2*mx-2e-4,h:ys[j+1]-ys[j]+2*my-2e-4}); } // 0.1mm縮める: 狭い廊下の中心線が丸め誤差で穴に入り、通れなくなるのを防ぐ
+ { const e=PC_WALL-1e-4; G.holes.forEach(H=>holes.push({x:H.x-e,y:H.y-e,w:H.w+2*e,h:H.h+2*e})); } // 入れ子の室の建具から1m入った点が丸め誤差で穴に入らないよう0.1mm小さく
  const I={rects,holes,mx,my};
  const cor=R=>[{x:R.x,y:R.y},{x:R.x+R.w,y:R.y},{x:R.x,y:R.y+R.h},{x:R.x+R.w,y:R.y+R.h}], wp=[];
  holes.forEach(H=>wp.push(...cor(H)));
