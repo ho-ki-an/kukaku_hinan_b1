@@ -2970,22 +2970,34 @@ function pcAreaRow(v,enter){ // 図上の面積の入力欄(ポンチ絵の大�
  return `<div class="pcMr"><label>図上の面積 <input type="text" inputmode="decimal" autocomplete="off" data-num id="pcA" min="1" step="any" value="${v}" style="width:6em" onkeydown="if(event.key==='Enter')${enter}"> m²</label><div class="small-note">ポンチ絵の大きさ専用(③の床面積とは連動しません)</div></div>`;
 }
 function pcAreaIn(){ const v=+document.getElementById("pcA").value; return v>0?Math.max(v,1):null; }
+function pcViewTL(){ // 拡大中: 枠に今映っている範囲の左上(図の座標)と、その画面位置
+ const box=document.getElementById("pcBox"), sv=box&&box.querySelector("svg"), V=PONCHI_VIEW; if(!sv||!V||PC_ZOOM<=1) return null;
+ const br=box.getBoundingClientRect(), sr=sv.getBoundingClientRect(); if(!sr.width) return null;
+ const cx=Math.max(br.left,sr.left)+24, cy=Math.max(br.top,sr.top)+24, k=V.W/sr.width; // 枠の端から少し内側
+ return {cx,cy,x:+(((cx-sr.left)*k-V.PAD)/V.s+V.ox).toFixed(3),y:+(((cy-sr.top)*k-V.PAD)/V.s+V.oy).toFixed(3)};
+}
+function pcKeepView(tl){ // 再描画で表示範囲が変わっても、tlの点が同じ画面位置に来るようにスクロール
+ const box=document.getElementById("pcBox"), sv=box&&box.querySelector("svg"), V=PONCHI_VIEW; if(!tl||!sv||!V) return;
+ const sr=sv.getBoundingClientRect(), k=sr.width/V.W;
+ box.scrollLeft+=sr.left+((tl.x-V.ox)*V.s+V.PAD)*k-tl.cx; box.scrollTop+=sr.top+((tl.y-V.oy)*V.s+V.PAD)*k-tl.cy;
+}
 function pcAddNode(type){
  const nm=(document.getElementById("pcNm").value||"").trim(); if(!nm) return;
  const A=pcAreaIn(); if(!A){ alert("図上の面積を入力してください"); return; }
  pcPush();
- M.ponchi=M.ponchi||{}; M.ponchi.area=M.ponchi.area||{};
+ M.ponchi=M.ponchi||{}; M.ponchi.area=M.ponchi.area||{}; M.ponchi.pos=M.ponchi.pos||{};
+ const tl=pcViewTL(), side=+Math.sqrt(A).toFixed(3), place=k=>{ if(tl) M.ponchi.pos[k]={x:tl.x,y:tl.y,w:side,h:side}; }; // 拡大中は今映っている範囲の左上に置く
  if(type==="room"){
   const kind=document.getElementById("pcKind").value, uk=kind==="room"?"office":"corridor", id=nid("r");
-  M.ponchi.area[id]=A;
+  M.ponchi.area[id]=A; place(id);
   M.rooms.push({id,name:nm,kind,verify:kind==="room",useKey:uk,p:USES[uk].p,ql:USES[uk].ql,walkV:WALKCAT[USES[uk].cat].other,interior:"funen",
    area:"",Hroom:"",Hlow:"",Htop:"",lRoomExit:"",lStair:"",lStairAlt:"",annex:{has:false,items:[]},
    exits:[],smoke:{type:"none",zoned:false,tarekabeH:"",Asc:"",Aa:"",s:"",openings:[]},_fold:true});
  }else{
-  const id=nid("st"); M.ponchi.area["s:"+id]=A;
+  const id=nid("st"); M.ponchi.area["s:"+id]=A; place("s:"+id);
   M.stairs.push({id,name:nm,width:"",groundW:"",ast:"",aloadOverride:"",special:false});
  }
- pcCommit();
+ pcCommit(); pcKeepView(tl);
 }
 function pcMenuNode(ev,key){
  PC_PEND={key};
