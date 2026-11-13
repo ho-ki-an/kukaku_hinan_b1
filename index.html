@@ -3433,7 +3433,7 @@ function pcDistSVG(X,Y){ // 歩行距離の表示: 居室ごとに、いちば�
    const tip=`${r.name||"(無名)"}: 室内でいちばん遠い点(壁から1m)から${K.nm}まで ${fmt(v,2)}m(${mode})`+(inp!=null?` / ③の入力 ${fmt(inp,2)}m`+(short?"(入力値が短い)":""):" / ③は未入力");
    h+=`<g pointer-events="none"><title>${esc(tip)}</title><path d="${d}" fill="none" stroke="#fff" stroke-width="5" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="${K.col}" stroke-width="2" stroke-dasharray="${K.dash}" stroke-linejoin="round"/>${pcArrowEnd(P,X,Y,K.col)}`
     +`<circle cx="${X(A.x)}" cy="${Y(A.y)}" r="4" fill="${K.col}" stroke="#fff" stroke-width="1.5"/>`
-    +`<text x="${tx}" y="${ty}" text-anchor="${anc}" font-size="12" font-weight="700" fill="${K.col}" paint-order="stroke" stroke="#fff" stroke-width="4">${K.row?"階":"室"} ${fmt(v,2)}m${inp!=null?`<tspan font-weight="400" fill="${short?"#c92a2a":"#56636f"}"> (③${fmt(inp,2)}${short?" ⚠":""})</tspan>`:""}</text></g>`; }); });
+    +`<text class="pcDistLbl" x="${tx}" y="${ty}" text-anchor="${anc}" font-size="12" font-weight="700" fill="${K.col}" paint-order="stroke" stroke="#fff" stroke-width="4"${PONCHI_EDIT?` pointer-events="auto" style="cursor:pointer" data-rid="${escA(r.id)}" data-f="${K.f}" data-v="${v}"`:""}>${PONCHI_EDIT?`<title>${esc(tip+"\nクリックで③「"+(K.row?"直通階段出口":"居室出口")+"までの歩行距離 max」に "+fmt(v,2)+"m を入れます")}</title>`:""}${K.row?"階":"室"} ${fmt(v,2)}m${inp!=null?`<tspan font-weight="400" fill="${short?"#c92a2a":"#56636f"}"> (③${fmt(inp,2)}${short?" ⚠":""})</tspan>`:""}</text></g>`; }); });
  return h;
 }
 function ponchiBind(){
@@ -3459,6 +3459,7 @@ function ponchiBind(){
    PONCHI_DRAG={draw:true,x0:+x0.toFixed(3),y0:+y0.toFixed(3),w,cx,thr,thrC,cur:null,sx:ev.clientX,sy:ev.clientY,moved:false};
    box.setPointerCapture(ev.pointerId); ev.preventDefault(); return;
   }
+  const dl=PONCHI_EDIT&&ev.target.closest(".pcDistLbl[data-f]"); if(dl){ PONCHI_DRAG={distSet:{rid:dl.dataset.rid,f:dl.dataset.f,v:dl.dataset.v}}; ev.preventDefault(); return; } // 歩行距離の数値クリック → ③の入力へ
   const mk=ev.target.closest(".pcChk");
   if(mk){ PONCHI_DRAG={chk:mk.dataset.chk,sx:ev.clientX,sy:ev.clientY,moved:false}; return; } // ⑧の印
   const dg=ev.target.closest(".pcDoorEd");
@@ -3538,6 +3539,7 @@ function ponchiBind(){
    else pcMeasClick(pt);
    return; }
   if(d.annexPick!=null){ if(ev.type==="pointerup"&&d.annexPick&&!d.annexPick.startsWith("s:")) pcAnnexToggle(d.annexPick); return; }
+  if(d.distSet){ if(ev.type==="pointerup"){ const q=d.distSet; pcMenuClose(); pcSelect({t:"room",k:q.rid}); pcSetF("room",q.rid,q.f,q.v,true,true); } return; }
   if(d.chk){ if(ev.type==="pointerup"&&PONCHI_EDIT){ const c=d.chk.indexOf(":"), ty=d.chk.slice(0,c), k=d.chk.slice(c+1); pcMenuClose(); pcSelect(ty==="door"?{t:"door",ex:k}:{t:ty,k}); } return; }
   if(d.draw){ pcBarPreview(null); const g=d.cur; if(ev.type==="pointerup"&&g&&Math.hypot(g.x2-g.x1,g.y2-g.y1)>=0.3) pcBarAdd(g); return; } // 短すぎる棒は引かない
   if(d.blank&&d.moved) return; // 図の移動だけ
