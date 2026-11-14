@@ -3561,6 +3561,8 @@ function ponchiBind(){
   if(d.moved){
    if(d.key&&d.act[0]==="e"){ const pos=M.ponchi.pos, p=pos[d.key]; M.ponchi.area=M.ponchi.area||{}; // 変形後の大きさを図上の面積に(内側の室の分を除く)
     M.ponchi.area[d.key]=+Math.max(1,p.w*p.h-(d.T.kids[d.key]||[]).reduce((s,c)=>s+pos[c].w*pos[c].h,0)).toFixed(2); }
+   else if(d.key){ const pos=M.ponchi.pos, T2=pcTree(ponchiData(PONCHI_CTX),pos), ks=(T,q)=>(T.kids[q]||[]).slice().sort().join(); // 室を入れ子に出し入れした時: 外側の室の大きさはそのまま、図上の面積を「外形−内側の室」に
+    Object.keys(pos).forEach(q=>{ if(pcBars(q)||ks(d.T,q)===ks(T2,q)) return; const p=pos[q]; M.ponchi.area=M.ponchi.area||{}; M.ponchi.area[q]=+Math.max(1,p.w*p.h-(T2.kids[q]||[]).reduce((s,c)=>s+pos[c].w*pos[c].h,0)).toFixed(2); }); }
    ponchiDraw(false); return; }
   if(ev.type!=="pointerup"||!PONCHI_EDIT) return;
   if(d.door){ pcSelect({t:"door",ex:d.door}); pcMenuDoor(ev,d.door); return; } // 建具: 右の入力欄+変更・反転・削除のメニュー
