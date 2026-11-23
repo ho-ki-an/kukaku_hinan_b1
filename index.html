@@ -3383,7 +3383,7 @@ function pcMeasTip(){
  const route=r.seq.map(x=>x.door!=null?`[${dnm(PC_DG[x.door])}]`:nmK(x.reg));
  const ro=M.rooms.find(x=>x.id===m.a.reg), v=Math.ceil(r.len*100-1e-9)/100;
  const btn=(f,lbl)=>`<button type="button" onclick="pcMeasSet('${f}')" title="${escA(ro?ro.name:"")} の${lbl}に ${fmt(v,2)}m を入れます(今の値: ${escA(String(ro&&ro[f]!==""&&ro[f]!=null?ro[f]+"m":"未入力"))})">③「${lbl}」に入れる</button>`;
- return `<div class="pcModeTip">📐 歩行距離 <b style="font-size:15px;color:#e8590c">${fmt(r.len,2)} m</b><span class="small-note">(${pcDistRect()?"水平・垂直":"直線"})</span> 経路: ${esc(route.join(" → "))}${ro?`<br>${esc(ro.name)} の ${btn("lRoomExit","居室出口までの歩行距離")} ${btn("lStair","直通階段出口までの歩行距離")}`:""} <span class="small-note">クリックで次の始点から測り直し。</span> ${end}</div>`;
+ return `<div class="pcModeTip">📐 歩行距離 <b style="font-size:15px;color:#e8590c">${fmt(r.len,2)} m</b><span class="small-note">(${pcDistRect()?"水平・垂直":"直線"})</span> 経路: ${esc(route.join(" → "))}${ro?`<br>${esc(ro.name)} の ${btn("lRoomExit","居室出口までの歩行距離")} ${btn("lStair","直通階段出口までの歩行距離")} ${btn("lStairAlt","同左(火災室で最大幅出口除外時)")}`:""} <span class="small-note">クリックで次の始点から測り直し。</span> ${end}</div>`;
 }
 function pcMeasSet(f){ const m=PC_MEAS, r=m&&m.res; if(!r||!r.pts||!m.a) return;
  const v=String(Math.ceil(r.len*100-1e-9)/100), ro=M.rooms.find(x=>x.id===m.a.reg);
@@ -3454,7 +3454,7 @@ function pcDistSVG(X,Y){ // 歩行距離の表示: 居室ごとに、いちば�
  if(!pcDistOn()) return "";
  let h=""; const mode=pcDistRect()?"水平・垂直":"直線", F=M.ponchi.showDistS?pcExitField():null;
  const kinds=[M.ponchi.showDist&&{f:"lRoomExit",col:"#7048e8",nm:"居室出口",F:null,row:0,dash:"6 4"},M.ponchi.showDistS&&{f:"lStair",col:"#0b7285",nm:"区画外・地上の出口",F,row:1,dash:"2 3"}].filter(Boolean);
- const SV={}; (M.rooms||[]).forEach(r=>{ if(PC_RG[r.id]) kinds.forEach(K=>{ const o=pcSavedRoute(r,K.f); if(o) (SV[r.id]=SV[r.id]||{})[K.f]=o; }); }); // 📐で測って③に入れた経路
+ const SV={}; (M.rooms||[]).forEach(r=>{ if(PC_RG[r.id]) kinds.forEach(K=>pcSavedFs(K).forEach(f=>{ const o=pcSavedRoute(r,f); if(o) (SV[r.id]=SV[r.id]||{})[f]=o; })); }); // 📐で測って③に入れた経路(階段・地上の表示では最大幅出口除外時も)
  const sh=(r,o)=>{ const n=(r.kind==="room"?kinds.length:0)+Object.keys(SV[r.id]||{}).length; return n>1&&o?` transform="translate(${o},${o})"`:""; }; // 線が重ならないよう、2本以上あるときは種類ごとに少しずらす(居室出口は左上・階段は右下・📐はそのまま)
  (M.rooms||[]).forEach(r=>{ if(r.kind!=="room"||!PC_RG[r.id]) return; const R0=PC_RG[r.id].rects[0];
   kinds.forEach(K=>{ const o=K.row&&!F?{err:"区画外・地上への出口がありません"}:pcRoomDist(r.id,K.F); if(!o) return;
@@ -3466,16 +3466,17 @@ function pcDistSVG(X,Y){ // 歩行距離の表示: 居室ごとに、いちば�
    h+=`<g pointer-events="none"><title>${esc(tip)}</title><g${sh(r,K.row?4:-4)}><path d="${d}" fill="none" stroke="#fff" stroke-width="5" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="${K.col}" stroke-width="2" stroke-dasharray="${K.dash}" stroke-linejoin="round"/>${pcArrowEnd(P,X,Y,K.col)}`
     +`<circle cx="${X(A.x)}" cy="${Y(A.y)}" r="4" fill="${K.col}" stroke="#fff" stroke-width="1.5"/></g>`
     +`<text class="pcDistLbl" x="${tx}" y="${ty}" text-anchor="${anc}" font-size="12" font-weight="700" fill="${K.col}" paint-order="stroke" stroke="#fff" stroke-width="4"${PONCHI_EDIT?` pointer-events="auto" style="cursor:pointer" data-rid="${escA(r.id)}" data-f="${K.f}" data-v="${v}"`:""}>${PONCHI_EDIT?`<title>${esc(tip+"\nクリックで③「"+(K.row?"直通階段出口":"居室出口")+"までの歩行距離 max」に "+fmt(v,2)+"m を入れます")}</title>`:""}${K.row?"階":"室"} ${fmt(v,2)}m${inp!=null?`<tspan font-weight="400" fill="${short?"#c92a2a":"#56636f"}"> (③${fmt(inp,2)}${short?" ⚠":""})</tspan>`:""}</text></g>`; }); });
- (M.rooms||[]).forEach(r=>{ if(!PC_RG[r.id]) return; kinds.forEach(K=>{ // 📐で測って③に入れた経路(オレンジ)
-  const o=SV[r.id]&&SV[r.id][K.f]; if(!o) return; const col="#e8590c", R0=PC_RG[r.id].rects[0];
-  if(o.err||!o.pts){ h+=`<text x="${X(R0.x)+6}" y="${Y(R0.y)+14+K.row*13}" font-size="11" fill="${col}" paint-order="stroke" stroke="#fff" stroke-width="3" pointer-events="none">📐 ${esc(o.err||"")}</text>`; return; }
-  const P=o.pts, d=P.map((p,i)=>(i?"L":"M")+X(p.x).toFixed(1)+","+Y(p.y).toFixed(1)).join(" "), v=Math.ceil(o.len*100-1e-9)/100, inp=+r[K.f], diff=Math.abs(v-inp)>0.005, L=P[P.length-1];
-  const tip=`${r.name||"(無名)"}: 📐で測定して③「${K.f==="lStair"?"直通階段出口":"居室出口"}までの歩行距離 max」に入れた経路 ${fmt(v,2)}m(${mode})`+(diff?` / ③の入力 ${fmt(inp,2)}m(図を動かしたため長さが変わっています)`:"");
+ (M.rooms||[]).forEach(r=>{ if(!PC_RG[r.id]) return; kinds.forEach(K=>pcSavedFs(K).forEach(f=>{ // 📐で測って③に入れた経路(オレンジ)
+  const o=SV[r.id]&&SV[r.id][f]; if(!o) return; const col="#e8590c", R0=PC_RG[r.id].rects[0], row=K.row+(f==="lStairAlt"?1:0), alt=f==="lStairAlt"?"除外時 ":"";
+  if(o.err||!o.pts){ h+=`<text x="${X(R0.x)+6}" y="${Y(R0.y)+14+row*13}" font-size="11" fill="${col}" paint-order="stroke" stroke="#fff" stroke-width="3" pointer-events="none">📐 ${alt}${esc(o.err||"")}</text>`; return; }
+  const P=o.pts, d=P.map((p,i)=>(i?"L":"M")+X(p.x).toFixed(1)+","+Y(p.y).toFixed(1)).join(" "), v=Math.ceil(o.len*100-1e-9)/100, inp=+r[f], diff=Math.abs(v-inp)>0.005, L=P[P.length-1];
+  const tip=`${r.name||"(無名)"}: 📐で測定して③「${f==="lStairAlt"?"直通階段出口までの歩行距離(火災室で最大幅出口除外時)":f==="lStair"?"直通階段出口までの歩行距離 max":"居室出口までの歩行距離 max"}」に入れた経路 ${fmt(v,2)}m(${mode})`+(diff?` / ③の入力 ${fmt(inp,2)}m(図を動かしたため長さが変わっています)`:"");
   h+=`<g pointer-events="none"><title>${esc(tip)}</title><path d="${d}" fill="none" stroke="#fff" stroke-width="5" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round"/>${pcArrowEnd(P,X,Y,col)}`
    +`<circle cx="${X(P[0].x)}" cy="${Y(P[0].y)}" r="4.5" fill="${col}" stroke="#fff" stroke-width="1.5"/>`
-   +`<text x="${X(L.x)+10}" y="${Y(L.y)-10-K.row*14}" font-size="12" font-weight="700" fill="${col}" paint-order="stroke" stroke="#fff" stroke-width="4">📐 ${fmt(v,2)}m${diff?`<tspan fill="#c92a2a" font-weight="400"> (③${fmt(inp,2)} ⚠)</tspan>`:""}</text></g>`; }); });
+   +`<text x="${X(L.x)+10}" y="${Y(L.y)-10-row*14}" font-size="12" font-weight="700" fill="${col}" paint-order="stroke" stroke="#fff" stroke-width="4">📐 ${alt}${fmt(v,2)}m${diff?`<tspan fill="#c92a2a" font-weight="400"> (③${fmt(inp,2)} ⚠)</tspan>`:""}</text></g>`; })); });
  return h;
 }
+function pcSavedFs(K){ return K.row?[K.f,"lStairAlt"]:[K.f]; } // 📐の経路を表示する③の欄
 function ponchiBind(){
  const box=document.getElementById("pcBox"); if(!box) return;
  box.style.touchAction="none";
