@@ -28,6 +28,11 @@ button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius
 .tabs button.active{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
 button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
 button.small{padding:3px 9px;font-size:12px}
+button.calcBtn{display:inline-flex;align-items:center;gap:8px;padding:1px 5px 1px 13px}
+.rdPick{display:inline-flex;flex-direction:column;border-left:1px solid rgba(255,255,255,.45);padding-left:5px}
+.rdPick span{font-size:10.5px;line-height:11.5px;width:17px;text-align:center;border-radius:3px;opacity:.45;font-weight:500}
+.rdPick span:hover{opacity:1;box-shadow:0 0 0 1px #fff inset}
+.rdPick span.on{background:#fff;color:var(--acc);opacity:1;font-weight:700}
 button.danger{color:var(--ng)}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
 .banner{margin:14px 0 4px}
@@ -476,7 +481,7 @@ tr.noEvacRow>td{background:#fbf1e3}
 </svg>
 </div>
 <div class="toolbar no-print">
- <button class="primary" onclick="runCalc()">計算実行</button>
+ <button class="primary calcBtn" id="btnCalc" onclick="runCalc()" title="計算実行。右の数字は時間のまるめ桁数(小数点以下)。ボタンの上でマウスホイール(または↑↓キー)で 2・3・4 を切替、数字をクリックするとその桁数で計算実行。2=解説書の計算例と同じ">計算実行<span class="rdPick" id="rdPick" aria-label="まるめ桁数"><span data-d="2" onclick="event.stopPropagation();rdSet(2,true)">2</span><span data-d="3" onclick="event.stopPropagation();rdSet(3,true)">3</span><span data-d="4" onclick="event.stopPropagation();rdSet(4,true)">4</span></span></button>
  <button onclick="printReport()">計算書を印刷(PDF)</button>
  <button onclick="loadSample()">サンプル読込(計算例:物流倉庫の事務室)</button>
  <button onclick="exportJSON()">保存(JSON)</button>
@@ -709,8 +714,14 @@ function wallNoteHTML(){
    計算エンジン(純関数群) ENGINE_START
    ========================================================= */
 function alphaF(ql){ return ql<=170 ? 0.0125 : 2.6e-6*Math.pow(ql,5/3); }
-function ceil2(x){ return Math.ceil(x*100-1e-9)/100; }
-function floor2(x){ return Math.floor(x*100+1e-9)/100; }
+/* 時間のまるめ桁数(小数点以下 2/3/4。既定2=BCJ解説書の計算例に倣う)。M.rd に保存(JSONにも入る) */
+function rdN(){ const d=+((typeof M!=="undefined"&&M)?M.rd:2); return (d===3||d===4)?d:2; }
+function ceil2(x){ const k=Math.pow(10,rdN()); return Math.ceil(x*k-1e-9)/k; }   // 名前は従来のまま(桁数は rdN)
+function floor2(x){ const k=Math.pow(10,rdN()); return Math.floor(x*k+1e-9)/k; }
+function sumRd(a){ const k=Math.pow(10,rdN()), s=a.reduce((p,v)=>p+v,0); return isFinite(s)?Math.round(s*k)/k:s; } // まるめ済みの値の和(浮動小数の誤差を除く)
+function fT(x){ return fmt(x,rdN()); }                          // まるめ後の時間の表示
+function fR(x){ return isFinite(+x)?fmt(x,rdN()+1):"∞"; }       // まるめ前の時間の表示(1桁多く)
+function rdPos(){ return "小数第"+(rdN()+1)+"位"; }
 function fmt(x,d=2){ // 空欄・文字列の数値(JSON読込値)にも対応
  if(x===""||x==null) return "—";
  const n=+x; if(Number.isNaN(n)) return "—";
@@ -956,8 +967,8 @@ function calcRoomEvac(model,room){
  const veR=calcVe(room,1.8);
  const ts=tsCalc(room.area,Hroom,1.8,Vs,veR.ve);
  if(Hroom<=1.8)warns.push("平均天井高さが1.8m以下です(検証不成立)");
- // 丸め規約(BCJ計算書方式): 避難時間は成分ごとに小数第2位切上げの和、煙降下時間は切捨て
- const tescR=ceil2(tstart)+ceil2(ttravel)+ceil2(tqueue);
+ // 丸め規約(BCJ計算書方式): 避難時間は成分ごとに小数点以下 rdN() 桁へ切上げの和、煙降下時間は切捨て
+ const tescR=sumRd([ceil2(tstart),ceil2(ttravel),ceil2(tqueue)]);
  const tsR=floor2(ts);
  const ok = tescR<=tsR;
  return {room,parts,sumA,tstart,ttravel,tqueue,tesc,tescR,tsR,af,am,treach,thr,exDet,P,denom,Vs,veR,ts,ok,warns};
@@ -1046,7 +1057,7 @@ function calcFloor(model){
    });
    const tqueue=denom>0? sumPA/denom : (sumPA>0?Infinity:0);
    const tesc=tstart+ttravel+tqueue;
-   const tescR=ceil2(tstart)+ceil2(ttravel)+ceil2(tqueue);
+   const tescR=sumRd([ceil2(tstart),ceil2(ttravel),ceil2(tqueue)]);
    // 煙降下経路
    const paths=findPaths(model,fire);
    const pathDet=paths.map(p=>pathSmoke(model,fire,p));
@@ -1145,7 +1156,7 @@ function pathSmoke(model,fire,pathIds){
    rows.push({room:cur,fireRoom:false,Hlim:hlc,Vs,vsHow,Aop,cls,ve:veC,ts});
    sum+=ts;
  }
- const sumR=rows.reduce((s,r)=>s+floor2(r.ts),0); // 各室切捨ての和(安全側・計算書方式)
+ const sumR=sumRd(rows.map(r=>floor2(r.ts))); // 各室切捨ての和(安全側・計算書方式)
  return {pathIds,rows,sum,sumR};
 }
 /* ENGINE_END
@@ -1589,38 +1600,38 @@ function compFormulaHTML(model,F,pf){
  const c=ceil2;
  const L=[];
  L.push(`<b>① 区画避難完了時間 tesc(comp) = tstart(comp) ＋ ttravel(comp) ＋ tqueue(comp)</b>`);
- L.push(`・tstart = √ΣAarea(comp)／30 ＋ ${add} = √${fmt(F.sumA)}／30 ＋ ${add} = ${fmt(pf.tstart,3)} → <b>${fmt(c(pf.tstart))}分</b>`);
- L.push(`・ttravel = max Σ(l／v) = ${pf.tRoomGov?esc(pf.tRoomGov.name)+": ":""}${fmtN(pf.govL)}m／${fmtN(pf.govV)}m/分 = ${fmt(pf.ttravel,3)} → <b>${fmt(c(pf.ttravel))}分</b>`);
+ L.push(`・tstart = √ΣAarea(comp)／30 ＋ ${add} = √${fmt(F.sumA)}／30 ＋ ${add} = ${fR(pf.tstart)} → <b>${fT(c(pf.tstart))}分</b>`);
+ L.push(`・ttravel = max Σ(l／v) = ${pf.tRoomGov?esc(pf.tRoomGov.name)+": ":""}${fmtN(pf.govL)}m／${fmtN(pf.govV)}m/分 = ${fR(pf.ttravel)} → <b>${fT(c(pf.ttravel))}分</b>`);
  const nb=pf.stDet.length?nbExpr(pf.stDet.map(x=>({Neff:x.Neff,B:x.e.width}))):"0";
- L.push(`・tqueue = ΣpAarea(comp)／Σ(Neff·Bst) = ${fmt(pf.sumPA,1)}人／(${nb}) = ${fmt(pf.sumPA,1)}／${fmt(pf.denom,1)} = ${isFinite(pf.tqueue)?fmt(pf.tqueue,3):"∞"} → <b>${fmt(c(pf.tqueue))}分</b>`);
- L.push(`・tesc = ${fmt(c(pf.tstart))} ＋ ${fmt(c(pf.ttravel))} ＋ ${fmt(c(pf.tqueue))} = <b>${fmt(pf.tescR)}分</b>`);
+ L.push(`・tqueue = ΣpAarea(comp)／Σ(Neff·Bst) = ${fmt(pf.sumPA,1)}人／(${nb}) = ${fmt(pf.sumPA,1)}／${fmt(pf.denom,1)} = ${fR(pf.tqueue)} → <b>${fT(c(pf.tqueue))}分</b>`);
+ L.push(`・tesc = ${fT(c(pf.tstart))} ＋ ${fT(c(pf.ttravel))} ＋ ${fT(c(pf.tqueue))} = <b>${fT(pf.tescR)}分</b>`);
  L.push(`<b>② 区画煙降下時間 ts(comp) = min(経路上の各室の煙降下時間の合計)、各室 ts = A(Hroom−Hlim)／max(Vs−Ve, 0.01)</b>`);
  const g=pf.govPath;
  if(g){
   L.push(`・支配経路: ${g.pathIds.map(nm).join(" → ")}(検討経路 ${pf.pathDet.length}本中 最小)`);
   g.rows.forEach(row=>{
    const r=row.room;
-   L.push(`　${esc(r.name)}${row.fireRoom?"(火災室)":""}: ts = ${fmt(r.area)}×(${fmt(+r.Hroom)}−${fmt(row.Hlim.v)})／(${fmt(row.Vs)}−${fmt(row.ve.ve)}) = ${fmt(row.ts,3)} → ${fmt(floor2(row.ts))}分`);
+   L.push(`　${esc(r.name)}${row.fireRoom?"(火災室)":""}: ts = ${fmt(r.area)}×(${fmt(+r.Hroom)}−${fmt(row.Hlim.v)})／(${fmt(row.Vs)}−${fmt(row.ve.ve)}) = ${fR(row.ts)} → ${fT(floor2(row.ts))}分`);
   });
-  L.push(`・ts(comp) = ${g.rows.map(r=>fmt(floor2(r.ts))).join(" ＋ ")} = <b>${fmt(pf.tsmoke)}分</b>`);
+  L.push(`・ts(comp) = ${g.rows.map(r=>fT(floor2(r.ts))).join(" ＋ ")} = <b>${fT(pf.tsmoke)}分</b>`);
  }else{
   L.push(`・検討経路なし`);
  }
- L.push(`<b>③ 判定: ${fmt(pf.tescR)}分 ${pf.ok?"≦":"＞"} ${isFinite(pf.tsmoke)?fmt(pf.tsmoke):"—"}分 → ${pf.ok?"OK":"NG"}</b>`);
- return `<div class="small-note fx">${L.join("<br>")}<br><span style="color:var(--sub)">※時間は各成分を小数第3位切上げ、煙降下時間は各室を小数第3位切捨て(安全側)。Vs・Veの詳細は計算書「4. 区画避難の検証」参照。</span></div>`;
+ L.push(`<b>③ 判定: ${fT(pf.tescR)}分 ${pf.ok?"≦":"＞"} ${isFinite(pf.tsmoke)?fT(pf.tsmoke):"—"}分 → ${pf.ok?"OK":"NG"}</b>`);
+ return `<div class="small-note fx">${L.join("<br>")}<br><span style="color:var(--sub)">※時間は各成分を${rdPos()}切上げ、煙降下時間は各室を${rdPos()}切捨て(安全側)。Vs・Veの詳細は計算書「4. 区画避難の検証」参照。</span></div>`;
 }
 function showResults(){
  const b=document.getElementById("resultsBody");
  let h="<h3>居室避難(令128条の7第3項1号イ・ロ/告示509号第一号・第二号)</h3>";
  LAST.roomResults.forEach(rr=>{
-  h+=`<div class="result-box ${rr.ok?"pass":"fail"}"><b>${rr.room.name}</b>: 居室避難完了時間 ${fmt(rr.tescR)}分 ${rr.ok?"≦":"＞"} 居室煙降下時間 ${fmt(rr.tsR)}分 → <span class="${rr.ok?"ok":"ng"}">${rr.ok?"OK":"NG"}</span>
+  h+=`<div class="result-box ${rr.ok?"pass":"fail"}"><b>${rr.room.name}</b>: 居室避難完了時間 ${fT(rr.tescR)}分 ${rr.ok?"≦":"＞"} 居室煙降下時間 ${fT(rr.tsR)}分 → <span class="${rr.ok?"ok":"ng"}">${rr.ok?"OK":"NG"}</span>
   ${rr.warns.length?`<div class="warn">⚠ ${rr.warns.join(" / ")}</div>`:""}</div>`;
  });
  h+="<h3>区画避難(令128条の7第3項1号ニ・ホ/告示509号第三号・第四号) — 火災室ごと</h3>";
  if(LAST.floorResult.skipped){h+=`<div class="result-box pass">区画部分が一の居室等のため第三号・第四号の検証は省略(居室避難までで判定)。以下は参考表示。</div>`;}
  if(LAST.floorResult.singleNG){h+=`<div class="result-box fail"><span class="warn">⚠ ${esc(LAST.floorResult.singleNG)}</span></div>`;}
  LAST.floorResult.perFire.forEach(pf=>{
-  h+=`<div class="result-box ${pf.ok?"pass":"fail"}"><b>火災室: ${pf.fire.name}</b>: 区画避難完了時間 ${fmt(pf.tescR)}分 ${pf.ok?"≦":"＞"} 区画煙降下時間 ${isFinite(pf.tsmoke)?fmt(pf.tsmoke):"—"}分 → <span class="${pf.ok?"ok":"ng"}">${pf.ok?"OK":"NG"}</span>
+  h+=`<div class="result-box ${pf.ok?"pass":"fail"}"><b>火災室: ${pf.fire.name}</b>: 区画避難完了時間 ${fT(pf.tescR)}分 ${pf.ok?"≦":"＞"} 区画煙降下時間 ${isFinite(pf.tsmoke)?fT(pf.tsmoke):"—"}分 → <span class="${pf.ok?"ok":"ng"}">${pf.ok?"OK":"NG"}</span>
   ${pf.excluded?`<span class="small-note">(除外出口: ${pf.excluded.room.name}の幅${pf.excluded.e.width}m)</span>`:""}
   ${compFormulaHTML(LAST.model,LAST.floorResult,pf)}
   ${pf.warns.length?`<div class="warn">⚠ ${pf.warns.join(" / ")}</div>`:""}</div>`;
@@ -1628,7 +1639,7 @@ function showResults(){
  const all=LAST.roomResults.every(r=>r.ok)&&(LAST.floorResult.skipped||LAST.floorResult.ok);
  const blank=LAST.model.rooms.filter(r=>r._areaBlank).map(r=>esc(r.name));
  if(blank.length) h=`<div class="result-box fail"><span class="warn">⚠ 床面積が未入力の室があります(0m²として計算しています): ${blank.join("、")}</span></div>`+h;
- h=`<div class="result-box ${all?"pass":"fail"}" style="font-size:15px"><b>総合判定: <span class="${all?"ok":"ng"}">${all?"区画避難安全性能を満たす(OK)":"NG(不適合項目あり)"}</span></b><div class="small-note">判定は避難時間を小数第3位切上げ、煙降下時間を切捨てで比較(安全側)。</div></div>`+h;
+ h=`<div class="result-box ${all?"pass":"fail"}" style="font-size:15px"><b>総合判定: <span class="${all?"ok":"ng"}">${all?"区画避難安全性能を満たす(OK)":"NG(不適合項目あり)"}</span></b><div class="small-note">判定は避難時間を${rdPos()}切上げ、煙降下時間を切捨てで比較(安全側・小数点以下${rdN()}桁)。</div></div>`+h;
  b.innerHTML=h;
 }
 /* ---------- 計算書 ---------- */
@@ -1656,7 +1667,7 @@ function buildReport(){
  <h1>区画避難安全検証法(時間判定法)計算書</h1>
  <div>建物名称: ${esc(model.bldgName)||"—"} / 対象区画部分: ${esc(model.floorName)||"—"}(${model.isEscape?"避難階":"避難階以外"}に存する) / 作成日: ${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日</div>
  <div style="margin:4px 0">根拠: 建築基準法施行令第128条の7第3項第1号、令和2年国土交通省告示第509号(区画部分からの避難に要する時間に基づく区画避難安全検証法に関する算出方法等を定める件)</div>
- <div style="font-size:10.5px;color:#555">※本計算書は参考計算です。数値・式の適用は告示原文との照合が必要です。避難時間は切上げ、煙降下時間は切捨てで比較(小数第2位)。火災室の限界煙層高さは経路先開口部の防火設備構造により判定((一財)日本建築センター「避難安全検証法(時間判定法)の解説及び計算例とその解説」の取扱いに準拠)。火災室に隣接しない経路上の室の煙等発生量は、経路上の各壁・開口部で算定した値のうち最小のもの(同解説 式3.10-6・質疑応答No.38)。居室出口の有効流動係数は当該居室の避難経路等の部分すべての収容可能人数と、それらを通らなければ避難できない部分(当該居室を含む)の人数により算定(同解説 表3.5-2・計算例2)。区画出口の有効流動係数は同解説 表2.9-1による。</div>`;
+ <div style="font-size:10.5px;color:#555">※本計算書は参考計算です。数値・式の適用は告示原文との照合が必要です。避難時間は各成分を切上げ、煙降下時間は切捨てで比較(小数点以下${rdN()}桁)。火災室の限界煙層高さは経路先開口部の防火設備構造により判定((一財)日本建築センター「避難安全検証法(時間判定法)の解説及び計算例とその解説」の取扱いに準拠)。火災室に隣接しない経路上の室の煙等発生量は、経路上の各壁・開口部で算定した値のうち最小のもの(同解説 式3.10-6・質疑応答No.38)。居室出口の有効流動係数は当該居室の避難経路等の部分すべての収容可能人数と、それらを通らなければ避難できない部分(当該居室を含む)の人数により算定(同解説 表3.5-2・計算例2)。区画出口の有効流動係数は同解説 表2.9-1による。</div>`;
  /* 室一覧 */
  h+=`<h2>1. 計算条件(室一覧)</h2><table><tr><th>室名</th><th>区分</th><th>用途</th><th>床面積[m²]</th><th>天井高Hroom[m]</th><th>内装(αm)</th><th>p[人/m²]</th><th>ql[MJ/m²]</th><th>αf</th><th>排煙</th></tr>`;
  model.rooms.forEach(r=>{
@@ -1711,10 +1722,10 @@ function buildReport(){
   const r=rr.room;
   h+=`<h3>3.${roomResults.indexOf(rr)+1} ${esc(r.name)}</h3>
   <table><tr><th colspan="2">一. 居室避難完了時間</th></tr>
-  <tr><td>イ 居室避難開始時間 tstart=√(ΣAarea)/30<br><span style="font-size:10px">Aarea=当該居室等の各部分の床面積</span></td><td>√${fmt(rr.sumA)}/30 = <b>${fmt(rr.tstart)}分</b>${annexExpr(rr)}</td></tr>
-  <tr><td>ロ 居室歩行時間 ttravel=max Σ(l/v)</td><td>${fmt(+r.lRoomExit,1)}m / ${r.walkV}m/分 = <b>${fmt(rr.ttravel)}分</b></td></tr>
-  <tr><td>ハ 居室出口通過時間 tqueue=ΣpAarea/Σ(Neff·Beff)</td><td>${fmt(rr.P,1)}人 / ${fmt(rr.denom,1)} = <b>${fmt(rr.tqueue)}分</b>${annexPExpr(rr)}<br><span style="font-size:10px">Σ(Neff·Beff) = ${nbExpr(rr.exDet.map(x=>({Neff:x.Neff,B:x.Beff})))} = ${fmt(rr.denom,1)} [人/分]</span>${beffExpr(rr)}</td></tr>
-  <tr><td>居室避難完了時間(各成分切上げの和)</td><td><b>${fmt(rr.tescR)}分</b></td></tr></table>
+  <tr><td>イ 居室避難開始時間 tstart=√(ΣAarea)/30<br><span style="font-size:10px">Aarea=当該居室等の各部分の床面積</span></td><td>√${fmt(rr.sumA)}/30 = ${fR(rr.tstart)} → <b>${fT(ceil2(rr.tstart))}分</b>${annexExpr(rr)}</td></tr>
+  <tr><td>ロ 居室歩行時間 ttravel=max Σ(l/v)</td><td>${fmt(+r.lRoomExit,1)}m / ${r.walkV}m/分 = ${fR(rr.ttravel)} → <b>${fT(ceil2(rr.ttravel))}分</b></td></tr>
+  <tr><td>ハ 居室出口通過時間 tqueue=ΣpAarea/Σ(Neff·Beff)</td><td>${fmt(rr.P,1)}人 / ${fmt(rr.denom,1)} = ${fR(rr.tqueue)} → <b>${fT(ceil2(rr.tqueue))}分</b>${annexPExpr(rr)}<br><span style="font-size:10px">Σ(Neff·Beff) = ${nbExpr(rr.exDet.map(x=>({Neff:x.Neff,B:x.Beff})))} = ${fmt(rr.denom,1)} [人/分]</span>${beffExpr(rr)}</td></tr>
+  <tr><td>居室避難完了時間(各成分切上げの和)</td><td>${fT(ceil2(rr.tstart))} ＋ ${fT(ceil2(rr.ttravel))} ＋ ${fT(ceil2(rr.tqueue))} = <b>${fT(rr.tescR)}分</b></td></tr></table>
   <table><tr><th>出口</th><th>有効幅B[m]</th><th>Neff[人/分m]</th><th>Beff[m]</th><th>備考</th></tr>`;
   rr.exDet.forEach((x,k)=>{
    h+=`<tr><td>出口${k+1}(${x.e.to.type==="ground"?"地上":x.e.to.type==="stair"?"階段":"→"+esc(roomById(model,x.e.to.ref)?.name||"?")})</td><td>${fmt(x.e.width)}</td><td>${fmt(x.Neff,1)}</td><td>${fmt(x.Beff)}</td><td>${x.isW?"最大幅出口: "+x.note+" (treach="+fmt(rr.treach)+"分, 0.14/√(αf+αm)="+fmt(rr.thr,3)+"分)":""} ${x.reason||""}</td></tr>`;
@@ -1723,8 +1734,8 @@ function buildReport(){
   <table><tr><th colspan="2">二. 居室煙降下時間(Hlim=1.8m)</th></tr>
   <tr><td>煙等発生量 Vs=9((αf+αm)A)<sup>1/3</sup>(Hlow<sup>5/3</sup>+(Hlow−Hroom+1.8)<sup>5/3</sup>)</td><td>αf=${fmt(rr.af,4)}, αm=${fmt(rr.am,4)} → <b>${fmt(rr.Vs)} m³/分</b></td></tr>
   <tr><td>有効排煙量 Ve</td><td><b>${fmt(rr.veR.ve)} m³/分</b> <span style="color:#555">(${rr.veR.notes.join(" / ")})</span></td></tr>
-  <tr><td>ts=A(Hroom−1.8)/max(Vs−Ve, 0.01)</td><td>${fmt(r.area)}×(${fmt(r.Hroom)}−1.8)/${fmt(Math.max(rr.Vs-rr.veR.ve,0.01))} = <b>${fmt(rr.tsR)}分</b>(切捨て)</td></tr>
-  <tr><td>三. 判定</td><td class="${rr.ok?"j-ok":"j-ng"}">${fmt(rr.tescR)}分 ${rr.ok?"≦":"＞"} ${fmt(rr.tsR)}分 → ${rr.ok?"OK":"NG"}</td></tr></table>`;
+  <tr><td>ts=A(Hroom−1.8)/max(Vs−Ve, 0.01)</td><td>${fmt(r.area)}×(${fmt(r.Hroom)}−1.8)/${fmt(Math.max(rr.Vs-rr.veR.ve,0.01))} = ${fR(rr.ts)} → <b>${fT(rr.tsR)}分</b>(切捨て)</td></tr>
+  <tr><td>三. 判定</td><td class="${rr.ok?"j-ok":"j-ng"}">${fT(rr.tescR)}分 ${rr.ok?"≦":"＞"} ${fT(rr.tsR)}分 → ${rr.ok?"OK":"NG"}</td></tr></table>`;
   if(rr.warns.length)h+=`<div style="color:#b26a00">⚠ ${rr.warns.join(" / ")}</div>`;
  });
  /* 階避難 */
@@ -1732,7 +1743,7 @@ function buildReport(){
  h+=`<div class="pagebreak"></div><h2>4. 区画避難の検証(告示509号第三号・第四号)</h2>${F.skipped?`<div>区画部分が1の居室のみのため本節の検証は省略できる(居室避難までの検証で判定)。以下は参考計算として掲載。</div>`:""}
  <table><tr><td>当該区画部分の床面積合計 ΣAarea</td><td>${fmt(F.sumA)} m²${F.annexA?`<br><span style="font-size:10px">室一覧の合計 ${fmt(F.sumA-F.annexA)} ＋ 個別入力の付属する居室 ${fmt(F.annexA)}</span>`:""}</td></tr>
  <tr><td>在館者人数 ΣpAarea(floor)</td><td>${fmt(F.sumPA,1)} 人${F.annexPA?`<br><span style="font-size:10px">室一覧の合計 ${fmt(F.sumPA-F.annexPA,1)} ＋ 個別入力の付属する居室 ${fmt(F.annexPA,1)}</span>`:""}</td></tr>
- <tr><td>イ 区画避難開始時間 tstart=√(ΣAarea)/30 ${F.sleeping?"+5(共同住宅・ホテル等)":"+3(その他用途)"}</td><td><b>${fmt(F.tstart)} 分</b></td></tr></table>`;
+ <tr><td>イ 区画避難開始時間 tstart=√(ΣAarea)/30 ${F.sleeping?"+5(共同住宅・ホテル等)":"+3(その他用途)"}</td><td>${fR(F.tstart)} → <b>${fT(ceil2(F.tstart))} 分</b></td></tr></table>`;
  const exRooms=model.rooms.filter(r=>r.fireExempt);
  if(exRooms.length){
   h+=`<div style="font-size:11px;margin:4px 0">火災室から除外した室(令128条の7第2項かっこ書(「火災室」の定義)・平12建設省告示第1440号(令和2年告示509号附則による改正後)「火災の発生のおそれの少ない室」該当として設計者判断): <b>${exRooms.map(r=>esc(r.name)).join("、")}</b><br>※同告示の該当条件(廊下・通路・便所・機械室・不燃性物品保管室等であり、かつ壁・天井の室内に面する仕上げが令128条の5第1項2号の仕上げ(準不燃材料等)であること)を満たすことを設計者が別途確認すること。</div>`;
@@ -1741,9 +1752,9 @@ function buildReport(){
   h+=`<h3>4.${pi+1} 火災室: ${esc(pf.fire.name)}</h3>
   <table><tr><th colspan="2">一. 区画避難完了時間</th></tr>
   <tr><td>除外出口(火災室の区画外への最大幅出口)</td><td>${pf.excluded?esc(pf.excluded.room.name)+" 幅"+fmt(pf.excluded.e.width)+"m":"なし"}</td></tr>
-  <tr><td>ロ 区画歩行時間 ttravel=max Σ(l/v)</td><td>${pf.tRoomGov?esc(pf.tRoomGov.name)+": "+fmtN(pf.govL)+"m／"+fmtN(pf.govV)+"m/分 = ":""}<b>${fmt(pf.ttravel)}分</b>${pf.tRoomGov?`<br><span style="font-size:10px">l＝当該室から区画外への出口までの歩行距離、v＝歩行速度(最大となる室を採用)</span>`:""}</td></tr>
-  <tr><td>ハ 区画外出口通過時間 tqueue=ΣpAarea/Σ(Neff·Bst)</td><td>${fmt(pf.sumPA,1)}人 / ${fmt(pf.denom,1)} = <b>${fmt(pf.tqueue)}分</b><br><span style="font-size:10px">Σ(Neff·Bst) = ${nbExpr(pf.stDet.map(x=>({Neff:x.Neff,B:x.e.width})))} = ${fmt(pf.denom,1)} [人/分]</span></td></tr>
-  <tr><td>区画避難完了時間 tesc=tstart＋ttravel＋tqueue(各成分切上げの和)</td><td>${fmt(ceil2(pf.tstart))} ＋ ${fmt(ceil2(pf.ttravel))} ＋ ${fmt(ceil2(pf.tqueue))} = <b>${fmt(pf.tescR)}分</b></td></tr></table>
+  <tr><td>ロ 区画歩行時間 ttravel=max Σ(l/v)</td><td>${pf.tRoomGov?esc(pf.tRoomGov.name)+": "+fmtN(pf.govL)+"m／"+fmtN(pf.govV)+"m/分 = ":""}${fR(pf.ttravel)} → <b>${fT(ceil2(pf.ttravel))}分</b>${pf.tRoomGov?`<br><span style="font-size:10px">l＝当該室から区画外への出口までの歩行距離、v＝歩行速度(最大となる室を採用)</span>`:""}</td></tr>
+  <tr><td>ハ 区画外出口通過時間 tqueue=ΣpAarea/Σ(Neff·Bst)</td><td>${fmt(pf.sumPA,1)}人 / ${fmt(pf.denom,1)} = ${fR(pf.tqueue)} → <b>${fT(ceil2(pf.tqueue))}分</b><br><span style="font-size:10px">Σ(Neff·Bst) = ${nbExpr(pf.stDet.map(x=>({Neff:x.Neff,B:x.e.width})))} = ${fmt(pf.denom,1)} [人/分]</span></td></tr>
+  <tr><td>区画避難完了時間 tesc=tstart＋ttravel＋tqueue(各成分切上げの和)</td><td>${fT(ceil2(pf.tstart))} ＋ ${fT(ceil2(pf.ttravel))} ＋ ${fT(ceil2(pf.tqueue))} = <b>${fT(pf.tescR)}分</b></td></tr></table>
   <table><tr><th>使用出口</th><th>Bst[m]</th><th>Neff</th><th>備考</th></tr>`;
   pf.stDet.forEach(x=>{h+=`<tr><td>${esc(x.room.name)}の出口(${x.e.to.type==="ground"?"地上":"区画外("+esc((model.stairs.find(s=>s.id===x.e.to.ref)||{}).name||"階段")+"経由)"}へ)</td><td>${fmt(x.e.width)}</td><td>${fmt(x.Neff,1)}</td><td>${x.reason}</td></tr>`;});
   h+=`</table><table><tr><th colspan="2">二. 区画煙降下時間(経路ごとの室煙降下時間の合計の最小値)</th></tr></table>`;
@@ -1751,12 +1762,12 @@ function buildReport(){
    h+=`<table><tr><th colspan="7">経路${k+1}: ${pd.pathIds.map(id=>esc(roomById(model,id)?.name)).join(" → ")} ${pd===pf.govPath?"【支配経路】":""}</th></tr>
    <tr><th>室</th><th>区分</th><th>限界煙層高さHlim[m]</th><th>Vs[m³/分]</th><th>Ve[m³/分]</th><th>ts[分]</th><th>備考</th></tr>`;
    pd.rows.forEach(row=>{
-    h+=`<tr><td>${esc(row.room.name)}</td><td>${row.fireRoom?"火災室":"経路上の室"}</td><td>${fmt(row.Hlim.v)}<br><span style="font-size:10px">${row.Hlim.how}</span></td><td>${fmt(row.Vs)}${row.vsHow?"<br><span style='font-size:10px'>"+row.vsHow+(row.Aop!=null?" (Aop="+fmt(row.Aop)+"m²)":"")+"</span>":""}</td><td>${fmt(row.ve.ve)}</td><td>${fmt(row.ts)}</td><td style="font-size:10px">${row.fireRoom?"Vs=9((αf+αm)A)^1/3(Hlow^5/3+(Hlow−Hroom+Hlim)^5/3)":""}</td></tr>`;
+    h+=`<tr><td>${esc(row.room.name)}</td><td>${row.fireRoom?"火災室":"経路上の室"}</td><td>${fmt(row.Hlim.v)}<br><span style="font-size:10px">${row.Hlim.how}</span></td><td>${fmt(row.Vs)}${row.vsHow?"<br><span style='font-size:10px'>"+row.vsHow+(row.Aop!=null?" (Aop="+fmt(row.Aop)+"m²)":"")+"</span>":""}</td><td>${fmt(row.ve.ve)}</td><td>${fR(row.ts)} → ${fT(floor2(row.ts))}</td><td style="font-size:10px">${row.fireRoom?"Vs=9((αf+αm)A)^1/3(Hlow^5/3+(Hlow−Hroom+Hlim)^5/3)":""}</td></tr>`;
    });
-   h+=`<tr><td colspan="5" style="text-align:right">経路合計(各室切捨ての和)</td><td><b>${fmt(pd.sumR)}</b></td><td></td></tr></table>`;
+   h+=`<tr><td colspan="5" style="text-align:right">経路合計(各室切捨ての和)</td><td><b>${fT(pd.sumR)}</b></td><td></td></tr></table>`;
   });
-  h+=`<table><tr><td>区画煙降下時間(最小)</td><td>${pf.govPath?"支配経路: "+pf.govPath.rows.map(r=>fmt(floor2(r.ts))).join(" ＋ ")+" = ":""}<b>${isFinite(pf.tsmoke)?fmt(pf.tsmoke):"—"} 分</b></td></tr>
-  <tr><td>三. 判定</td><td class="${pf.ok?"j-ok":"j-ng"}">${fmt(pf.tescR)}分 ${pf.ok?"≦":"＞"} ${isFinite(pf.tsmoke)?fmt(pf.tsmoke):"—"}分 → ${pf.ok?"OK":"NG"}</td></tr></table>`;
+  h+=`<table><tr><td>区画煙降下時間(最小)</td><td>${pf.govPath?"支配経路: "+pf.govPath.rows.map(r=>fT(floor2(r.ts))).join(" ＋ ")+" = ":""}<b>${isFinite(pf.tsmoke)?fT(pf.tsmoke):"—"} 分</b></td></tr>
+  <tr><td>三. 判定</td><td class="${pf.ok?"j-ok":"j-ng"}">${fT(pf.tescR)}分 ${pf.ok?"≦":"＞"} ${isFinite(pf.tsmoke)?fT(pf.tsmoke):"—"}分 → ${pf.ok?"OK":"NG"}</td></tr></table>`;
   if(pf.warns.length)h+=`<div style="color:#b26a00">⚠ ${pf.warns.join(" / ")}</div>`;
  });
  const all=roomResults.every(r=>r.ok)&&(F.skipped||F.ok);
@@ -1781,11 +1792,19 @@ function importJSON(){
   rd.readAsText(file);};
  f.click();
 }
-function resetAll(){ if(!confirm("入力を全て消去しますか?"))return; M={bldgName:"",floorName:"",isEscape:false,singleRoom:false,stairs:[],doors:[],rooms:[]};LAST=null;
+function resetAll(){ if(!confirm("入力を全て消去しますか?"))return; M={bldgName:"",floorName:"",isEscape:false,singleRoom:false,stairs:[],doors:[],rooms:[],rd:rdN()};LAST=null; // まるめ桁数は残す
  document.getElementById("resultsBody").innerHTML='<div class="note">「計算実行」を押すとここに判定概要が表示されます。</div>';
  document.getElementById("report").innerHTML='<div class="note no-print">「計算実行」を押すとここに印刷用計算書が表示されます。</div>';
  renderAll();showTab("base");}
+/* まるめ桁数の切替(計算実行ボタンの右の 2/3/4) */
+function rdUI(){ document.querySelectorAll("#rdPick span").forEach(s=>s.classList.toggle("on",+s.dataset.d===rdN())); }
+function rdSet(d,run){ M.rd=d; rdUI(); if(run) runCalc(); }
+(function(){ const b=document.getElementById("btnCalc"); if(!b) return;
+ b.addEventListener("wheel",e=>{ e.preventDefault(); const d=Math.min(4,Math.max(2,rdN()+(e.deltaY>0?1:-1))); if(d!==rdN()) rdSet(d,false); },{passive:false});
+ b.addEventListener("keydown",e=>{ if(e.key==="ArrowUp"||e.key==="ArrowDown"){ e.preventDefault(); rdSet(Math.min(4,Math.max(2,rdN()+(e.key==="ArrowDown"?1:-1))),false); } });
+ rdUI(); })();
 function renderAll(){
+ rdUI();
  document.getElementById("bldgName").value=M.bldgName||"";
  document.getElementById("floorName").value=M.floorName||"";
  document.getElementById("isEscape").value=M.isEscape?"1":"0";
@@ -2058,7 +2077,7 @@ function chkCollect(model,calc){
   const i=rooms.findIndex(x=>x.id===rr.room.id); if(i<0)return;
   const nm=`「${rr.room.name}」`;
   rr.warns.forEach(w=>{ if(!/避難時不使用の建具/.test(w)) put("warn",R(i),nm+": "+w); });
-  if(isFinite(rr.tsR) && rr.tescR>0 && rr.tsR/rr.tescR>10) put("info",R(i),nm+`の煙降下時間 ${fmt(rr.tsR)}分 が避難完了時間 ${fmt(rr.tescR)}分 の10倍超です(排煙量・天井高・面積の過大入力がないか)`);
+  if(isFinite(rr.tsR) && rr.tescR>0 && rr.tsR/rr.tescR>10) put("info",R(i),nm+`の煙降下時間 ${fT(rr.tsR)}分 が避難完了時間 ${fT(rr.tescR)}分 の10倍超です(排煙量・天井高・面積の過大入力がないか)`);
   if(rr.Vs>0 && rr.veR && rr.veR.ve>=rr.Vs) put("info",R(i),nm+"は有効排煙量Ve≧煙等発生量Vsのため煙降下時間が極大になっています(排煙入力を確認)","smoke");
  });
  ((calc.floor&&calc.floor.perFire)||[]).forEach(pf=>{
@@ -3611,35 +3630,35 @@ function chkBarRow(name,seg,ts,scale,jump,sub,tsLabel,tsFx){
  const over=isFinite(ts)&&ts>scale;
  const tsP=isFinite(ts)?pct(ts):100;
  const ok=isFinite(ts)? tot<=ts+1e-9 : true;
- const segH=seg.map((x,k)=>`<span class="chkSeg s${k+1}" style="width:${pct(x.v)}%" title="${escA(x.label+" "+fmt(x.v)+"分"+(x.fx?"\n"+x.fx:""))}"></span>`).join("");
+ const segH=seg.map((x,k)=>`<span class="chkSeg s${k+1}" style="width:${pct(x.v)}%" title="${escA(x.label+" "+fT(x.v)+"分"+(x.fx?"\n"+x.fx:""))}"></span>`).join("");
  const margin=isFinite(ts)? ts-tot : Infinity;
  return `<div class="chkBarRow" ${jump?`onclick="${jump}" title="クリックで③室の入力へ移動(棒・煙の線にマウスを乗せると計算式)"`:""}>
   <div class="nm">${esc(chkShort(name,14))}${sub?`<div class="small-note">${sub}</div>`:""}</div>
   <div class="track"><div class="segs">${segH}</div>
-   <div class="tsMark${over?" over":""}" style="left:${tsP}%" title="${escA((tsLabel||"煙降下")+" "+(isFinite(ts)?fmt(ts):"∞")+"分"+(tsFx?"\n"+tsFx:""))}"><span>${over?"▶ ":""}煙 ${isFinite(ts)?fmt(ts):"∞"}</span></div></div>
-  <div class="val">${fmt(tot)} ${ok?"≦":"＞"} ${isFinite(ts)?fmt(ts):"∞"}分 <b class="${ok?"ok":"ng"}">${ok?"OK":"NG"}</b><div class="small-note">余裕 ${isFinite(margin)?fmt(margin):"∞"}分${isFinite(ts)&&tot>0?`(${fmt(ts/tot,1)}倍)`:""}</div></div></div>`;
+   <div class="tsMark${over?" over":""}" style="left:${tsP}%" title="${escA((tsLabel||"煙降下")+" "+(isFinite(ts)?fT(ts):"∞")+"分"+(tsFx?"\n"+tsFx:""))}"><span>${over?"▶ ":""}煙 ${isFinite(ts)?fT(ts):"∞"}</span></div></div>
+  <div class="val">${fT(tot)} ${ok?"≦":"＞"} ${isFinite(ts)?fT(ts):"∞"}分 <b class="${ok?"ok":"ng"}">${ok?"OK":"NG"}</b><div class="small-note">余裕 ${isFinite(margin)?fT(margin):"∞"}分${isFinite(ts)&&tot>0?`(${fmt(ts/tot,1)}倍)`:""}</div></div></div>`;
 }
 /* 時間の内訳グラフの計算式(マウスを乗せると表示) */
-const fx3=v=>isFinite(v)?fmt(v,3):"∞";
+const fx3=v=>fR(v); // まるめ前の時間(まるめ桁数＋1桁)
 function chkFxRoom(x){
  const r=x.room, l=+r.lRoomExit||0, v=+r.walkV||60;
- const st=`避難開始時間 tstart = √ΣAarea / 30\n= √${fmt(x.sumA)} / 30 = ${fx3(x.tstart)} → ${fmt(ceil2(x.tstart))}分(小数第2位切上げ)`+((x.parts||[]).length?`\n(ΣAarea=当該居室${fmt(r.area)}＋付属する居室${fmt(x.sumA-r.area)})`:"");
- const tr=`歩行時間 ttravel = l / v\n= ${fmt(l)} / ${fmt(v)} = ${fx3(x.ttravel)} → ${fmt(ceil2(x.ttravel))}分`;
+ const st=`避難開始時間 tstart = √ΣAarea / 30\n= √${fmt(x.sumA)} / 30 = ${fx3(x.tstart)} → ${fT(ceil2(x.tstart))}分(${rdPos()}切上げ)`+((x.parts||[]).length?`\n(ΣAarea=当該居室${fmt(r.area)}＋付属する居室${fmt(x.sumA-r.area)})`:"");
+ const tr=`歩行時間 ttravel = l / v\n= ${fmt(l)} / ${fmt(v)} = ${fx3(x.ttravel)} → ${fT(ceil2(x.ttravel))}分`;
  const ex=(x.exDet||[]).map((d,k)=>`  出口${k+1}: Neff ${fmt(d.Neff,1)} × Beff ${fmt(d.Beff)} = ${fmt(d.Neff*d.Beff,2)}${d.isW?"(最大幅出口)":""}`).join("\n");
- const q=`出口通過時間 tqueue = ΣpA / Σ(Neff·Beff)\n= ${fmt(x.P,2)} / ${fmt(x.denom,2)} = ${fx3(x.tqueue)} → ${fmt(ceil2(x.tqueue))}分`+(ex?"\n"+ex:"");
+ const q=`出口通過時間 tqueue = ΣpA / Σ(Neff·Beff)\n= ${fmt(x.P,2)} / ${fmt(x.denom,2)} = ${fx3(x.tqueue)} → ${fT(ceil2(x.tqueue))}分`+(ex?"\n"+ex:"");
  const H=+r.Hroom, ve=(x.veR&&x.veR.ve)||0;
- const ts=`煙降下時間 ts = A·(Hroom − 1.8) / max(Vs − Ve, 0.01)\n= ${fmt(r.area)} × (${fmt(H)} − 1.8) / max(${fmt(x.Vs,2)} − ${fmt(ve,2)}, 0.01) = ${fx3(x.ts)} → ${fmt(x.tsR)}分(切捨て)\nVs = 9·((αf+αm)·A)^(1/3)·(Hlow^(5/3)+(Hlow−Hroom+1.8)^(5/3))  αf=${fmt(x.af,4)} αm=${fmt(x.am,4)}`;
+ const ts=`煙降下時間 ts = A·(Hroom − 1.8) / max(Vs − Ve, 0.01)\n= ${fmt(r.area)} × (${fmt(H)} − 1.8) / max(${fmt(x.Vs,2)} − ${fmt(ve,2)}, 0.01) = ${fx3(x.ts)} → ${fT(x.tsR)}分(切捨て)\nVs = 9·((αf+αm)·A)^(1/3)·(Hlow^(5/3)+(Hlow−Hroom+1.8)^(5/3))  αf=${fmt(x.af,4)} αm=${fmt(x.am,4)}`;
  return {st,tr,q,ts};
 }
 function chkFxFloor(p,sumLbl){
- const st=`${sumLbl}開始時間 tstart = √ΣA / 30 + ${p.sleeping?5:3}${p.sleeping?"(就寝用途あり)":""}\n= √${fmt(p.sumA)} / 30 + ${p.sleeping?5:3} = ${fx3(p.tstart)} → ${fmt(ceil2(p.tstart))}分`;
- const tr=`歩行時間 ttravel = max(l / v)(支配室: ${p.tRoomGov?p.tRoomGov.name:"—"})\n= ${fmt(p.govL)} / ${fmt(p.govV)} = ${fx3(p.ttravel)} → ${fmt(ceil2(p.ttravel))}分`;
+ const st=`${sumLbl}開始時間 tstart = √ΣA / 30 + ${p.sleeping?5:3}${p.sleeping?"(就寝用途あり)":""}\n= √${fmt(p.sumA)} / 30 + ${p.sleeping?5:3} = ${fx3(p.tstart)} → ${fT(ceil2(p.tstart))}分`;
+ const tr=`歩行時間 ttravel = max(l / v)(支配室: ${p.tRoomGov?p.tRoomGov.name:"—"})\n= ${fmt(p.govL)} / ${fmt(p.govV)} = ${fx3(p.ttravel)} → ${fT(ceil2(p.ttravel))}分`;
  const ex=(p.stDet||[]).map(d=>`  ${d.room.name}の出口: Neff ${fmt(d.Neff,1)} × B ${fmt(d.e.width)} = ${fmt(d.Neff*d.e.width,2)}`).join("\n");
- const q=`出口通過時間 tqueue = ΣpA / Σ(Neff·B)\n= ${fmt(p.sumPA,2)} / ${fmt(p.denom,2)} = ${fx3(p.tqueue)} → ${fmt(ceil2(p.tqueue))}分`+(ex?"\n"+ex:"");
+ const q=`出口通過時間 tqueue = ΣpA / Σ(Neff·B)\n= ${fmt(p.sumPA,2)} / ${fmt(p.denom,2)} = ${fx3(p.tqueue)} → ${fT(ceil2(p.tqueue))}分`+(ex?"\n"+ex:"");
  let ts="煙降下時間: 火災室から区画外への出口を有する室への経路がないため算定なし";
  if(p.govPath){
-  const rows=p.govPath.rows.map(w=>`  ${w.room.name}${w.fireRoom?"(火災室)":""}: ${fmt(w.room.area)} × (${fmt(+w.room.Hroom)} − ${fmt(w.Hlim.v,2)}) / max(${fmt(w.Vs,2)} − ${fmt((w.ve&&w.ve.ve)||0,2)}, 0.01) = ${fx3(w.ts)} → ${fmt(floor2(w.ts))}`).join("\n");
-  ts=`煙降下時間 ts = Σ{ A·(Hroom − Hlim) / max(Vs − Ve, 0.01) }(経路上の各室・切捨ての和)\n${rows}\n合計 = ${fmt(p.tsmoke)}分`;
+  const rows=p.govPath.rows.map(w=>`  ${w.room.name}${w.fireRoom?"(火災室)":""}: ${fmt(w.room.area)} × (${fmt(+w.room.Hroom)} − ${fmt(w.Hlim.v,2)}) / max(${fmt(w.Vs,2)} − ${fmt((w.ve&&w.ve.ve)||0,2)}, 0.01) = ${fx3(w.ts)} → ${fT(floor2(w.ts))}`).join("\n");
+  ts=`煙降下時間 ts = Σ{ A·(Hroom − Hlim) / max(Vs − Ve, 0.01) }(経路上の各室・切捨ての和)\n${rows}\n合計 = ${fT(p.tsmoke)}分`;
  }
  return {st,tr,q,ts};
 }
